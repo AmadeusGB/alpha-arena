@@ -17,26 +17,33 @@ class DecisionService:
     def __init__(self, db: Session):
         self.db = db
         self.models = {}
-        self._initialize_models()
-    
-    def _initialize_models(self):
-        """初始化模型"""
-        model_configs = [
+        # 不自动初始化，延迟到首次使用时初始化
+        self._model_configs = [
             ('qwen3', 'Qwen/Qwen3-32B'),
             ('deepseek', 'deepseek-ai/DeepSeek-R1'),
             ('kimi', 'moonshotai/Kimi-K2-Instruct-0905')
         ]
-        
-        for model_name, model_id in model_configs:
+    
+    def _ensure_models_initialized(self):
+        """确保模型已初始化"""
+        if not self.models:
+            self._initialize_models()
+    
+    def _initialize_models(self):
+        """初始化模型"""
+        for model_name, model_id in self._model_configs:
             try:
                 adapter = SiliconAdapter(model=model_id)
                 decision_maker = DecisionMaker(adapter)
                 self.models[model_name] = decision_maker
+                print(f"✅ 模型 {model_name} 初始化成功")
             except Exception as e:
-                print(f"模型 {model_name} 初始化失败: {e}")
+                print(f"❌ 模型 {model_name} 初始化失败: {e}")
     
     async def make_decision_for_model(self, model_name: str, prices: Dict[str, float]) -> Dict:
         """为特定模型生成决策"""
+        self._ensure_models_initialized()
+        
         if model_name not in self.models:
             return {}
         
@@ -78,6 +85,7 @@ class DecisionService:
     
     async def make_decisions(self, prices: Dict[str, float]) -> Dict[str, Dict]:
         """为所有模型生成决策"""
+        self._ensure_models_initialized()
         decisions = {}
         
         for model_name in self.models.keys():
@@ -112,7 +120,3 @@ class DecisionService:
             query = query.filter(Conversation.model_name == model_name)
         
         return query.order_by(Conversation.timestamp.desc()).limit(limit).all()
-
-
-import asyncio
-

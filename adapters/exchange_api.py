@@ -2,23 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 交易所API适配器
-基于现有的Bitget API获取真实价格数据
+基于Bitget官方API文档实现签名机制
+文档：https://www.bitget.com/zh-CN/api-doc/common/signature
 """
 
 import os
-import sys
 from typing import Dict, List
-
-# 添加cex_scripts路径到sys.path
-cex_scripts_path = "/Users/binguo/workspaces/cex_scripts/scripts/tools"
-if cex_scripts_path not in sys.path:
-    sys.path.append(cex_scripts_path)
-
-try:
-    from cex_verified_api_client import BitgetVerifiedAPIClient
-except ImportError:
-    print("❌ 无法导入BitgetVerifiedAPIClient，请检查cex_scripts路径")
-    BitgetVerifiedAPIClient = None
+from adapters.bitget_api_client import BitgetAPIClient
 
 
 class ExchangeAPI:
@@ -26,11 +16,13 @@ class ExchangeAPI:
     
     def __init__(self):
         """初始化交易所API"""
-        if BitgetVerifiedAPIClient is None:
-            raise ImportError("BitgetVerifiedAPIClient未找到")
-        
         try:
-            self.client = BitgetVerifiedAPIClient()
+            # 从环境变量读取配置
+            self.client = BitgetAPIClient(
+                api_key=os.getenv('BITGET_API_KEY'),
+                secret_key=os.getenv('BITGET_SECRET_KEY'),
+                passphrase=os.getenv('BITGET_PASSPHRASE')
+            )
             print("✅ Bitget API客户端初始化成功")
         except Exception as e:
             print(f"❌ Bitget API客户端初始化失败: {e}")

@@ -22,7 +22,7 @@ class DecisionService:
         # 不自动初始化，延迟到首次使用时初始化
         self._model_configs = [
             ('qwen3', 'Qwen/Qwen3-32B'),
-            ('deepseek', 'deepseek-ai/DeepSeek-R1'),
+            ('deepseek', 'deepseek-ai/DeepSeek-V3.1-Terminus'),
             ('kimi', 'moonshotai/Kimi-K2-Instruct-0905')
         ]
     
@@ -33,14 +33,21 @@ class DecisionService:
     
     def _initialize_models(self):
         """初始化模型"""
+        print(f"🔄 开始初始化 {len(self._model_configs)} 个模型...")
         for model_name, model_id in self._model_configs:
             try:
+                print(f"🔄 正在初始化 {model_name} ({model_id})...")
                 adapter = SiliconAdapter(model=model_id)
                 decision_maker = DecisionMaker(adapter)
                 self.models[model_name] = decision_maker
-                print(f"✅ 模型 {model_name} 初始化成功")
+                print(f"✅ 模型 {model_name} 初始化成功 (模型ID: {model_id})")
             except Exception as e:
-                print(f"❌ 模型 {model_name} 初始化失败: {e} {traceback.format_exc()}")
+                print(f"❌ 模型 {model_name} 初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print(f"✅ 模型初始化完成，成功初始化 {len(self.models)}/{len(self._model_configs)} 个模型")
+        print(f"   已初始化的模型: {list(self.models.keys())}")
     
     async def make_decision_for_model(self, model_name: str, prices: Dict[str, float], indicators: Dict[str, Dict] = None) -> Dict:
         """为特定模型生成决策"""

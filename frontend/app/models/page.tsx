@@ -13,6 +13,8 @@ export default function ModelsPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [activeTab, setActiveTab] = useState<'history' | 'chat' | 'positions'>('history');
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState<Decision | null>(null);
 
   useEffect(() => {
     loadData();
@@ -42,12 +44,12 @@ export default function ModelsPage() {
   const loadModelDetails = async (modelName: string) => {
     try {
       // 加载决策历史
-      const decisionsRes = await decisionApi.getDecisions(modelName, 20);
-      setDecisions(decisionsRes.data.items);
+      const decisionsRes = await decisionApi.getDecisions(modelName);
+      setDecisions(decisionsRes.data);
       
       // 加载持仓
       const positionsRes = await positionsApi.getPositions(modelName);
-      setPositions(positionsRes.data.items);
+      setPositions(positionsRes.data);
       
       // 生成模拟历史数据（实际应该从API获取）
       const history = generateMockHistory(portfolios.find(p => p.model_name === modelName));
@@ -165,7 +167,12 @@ export default function ModelsPage() {
                 <div className="h-[400px] overflow-y-auto">
                   {activeTab === 'history' && (
                     <div className="space-y-2">
-                      {decisions.map((decision) => (
+                      {Array.isArray(decisions) && decisions.length === 0 ? (
+                        <div className="text-center py-8 text-zinc-600 dark:text-zinc-400">
+                          暂无交易历史
+                        </div>
+                      ) : (
+                        Array.isArray(decisions) && decisions.map((decision) => (
                         <div
                           key={decision.id}
                           className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg"
@@ -195,14 +202,27 @@ export default function ModelsPage() {
                             {new Date(decision.timestamp).toLocaleString('zh-CN')}
                           </div>
                         </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   )}
 
                   {activeTab === 'chat' && (
                     <div className="space-y-2 text-zinc-600 dark:text-zinc-400">
-                      {decisions.slice(0, 10).map((decision, idx) => (
-                        <div key={idx} className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
+                      {!Array.isArray(decisions) || decisions.length === 0 ? (
+                        <div className="text-center py-8 text-zinc-600 dark:text-zinc-400">
+                          暂无聊天记录
+                        </div>
+                      ) : (
+                        Array.isArray(decisions) && decisions.slice(0, 10).map((decision, idx) => (
+                        <div 
+                          key={idx} 
+                          className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-lg cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          onClick={() => {
+                            setModalContent(decision);
+                            setModalOpen(true);
+                          }}
+                        >
                           <div className="text-xs mb-1 text-zinc-500">
                             {new Date(decision.timestamp).toLocaleString('zh-CN')}
                           </div>
@@ -212,19 +232,23 @@ export default function ModelsPage() {
                           <div className="text-sm mt-1">
                             <strong>Response:</strong> {decision.response_raw ? JSON.stringify(decision.response_raw).substring(0, 100) : 'N/A'}...
                           </div>
+                          <div className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                            点击查看完整内容 →
+                          </div>
                         </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   )}
 
                   {activeTab === 'positions' && (
                     <div className="space-y-2">
-                      {positions.length === 0 ? (
+                      {!Array.isArray(positions) || positions.length === 0 ? (
                         <div className="text-center py-8 text-zinc-600 dark:text-zinc-400">
                           暂无持仓
                         </div>
                       ) : (
-                        positions.map((position) => (
+                        Array.isArray(positions) && positions.map((position) => (
                           <div
                             key={position.id}
                             className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg"
@@ -274,6 +298,116 @@ export default function ModelsPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal */}
+      {modalOpen && modalContent && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setModalOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
+              <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+                聊天详情
+              </h3>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              <div className="space-y-6">
+                {/* Timestamp */}
+                <div className="text-sm text-zinc-500 dark:text-zinc-500">
+                  {new Date(modalContent.timestamp).toLocaleString('zh-CN')}
+                </div>
+
+                {/* Prompt */}
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+                    Prompt:
+                  </h4>
+                  <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
+                    <pre className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
+                      {modalContent.prompt || 'N/A'}
+                    </pre>
+                  </div>
+                </div>
+
+                {/* Response */}
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+                    Response:
+                  </h4>
+                  <div className="p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
+                    {modalContent.response_raw ? (
+                      <pre className="whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300 overflow-x-auto">
+                        {JSON.stringify(modalContent.response_raw, null, 2)}
+                      </pre>
+                    ) : (
+                      <div className="text-sm text-zinc-600 dark:text-zinc-400">N/A</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Decision Info */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-sm text-zinc-600 dark:text-zinc-400">Symbol</div>
+                    <div className="font-medium text-zinc-900 dark:text-zinc-50">
+                      {modalContent.symbol || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-zinc-600 dark:text-zinc-400">Action</div>
+                    <div className="font-medium text-zinc-900 dark:text-zinc-50">
+                      {modalContent.action}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-zinc-600 dark:text-zinc-400">Confidence</div>
+                    <div className="font-medium text-zinc-900 dark:text-zinc-50">
+                      {modalContent.confidence ? `${(modalContent.confidence * 100).toFixed(1)}%` : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reasoning */}
+                {modalContent.reasoning && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 mb-2">
+                      Reasoning:
+                    </h4>
+                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="text-sm text-zinc-700 dark:text-zinc-300">
+                        {modalContent.reasoning}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-700 flex justify-end">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

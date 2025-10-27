@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from app.config import settings
+from app.config import settings as app_settings
 from app.database import SessionLocal
 from app.services.scheduler_service import SchedulerService
 
@@ -21,7 +21,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.api import market, decisions, portfolios, positions, system
+from app.api import market, decisions, portfolios, positions, system, settings as settings_api, models
 
 app = FastAPI(
     title="Alpha Arena API",
@@ -39,11 +39,13 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}/market", tags=["market"])
-app.include_router(decisions.router, prefix=f"{settings.API_V1_PREFIX}/decisions", tags=["decisions"])
-app.include_router(portfolios.router, prefix=f"{settings.API_V1_PREFIX}/portfolios", tags=["portfolios"])
-app.include_router(positions.router, prefix=f"{settings.API_V1_PREFIX}/positions", tags=["positions"])
-app.include_router(system.router, prefix=f"{settings.API_V1_PREFIX}/system", tags=["system"])
+app.include_router(market.router, prefix=f"{app_settings.API_V1_PREFIX}/market", tags=["market"])
+app.include_router(decisions.router, prefix=f"{app_settings.API_V1_PREFIX}/decisions", tags=["decisions"])
+app.include_router(portfolios.router, prefix=f"{app_settings.API_V1_PREFIX}/portfolios", tags=["portfolios"])
+app.include_router(positions.router, prefix=f"{app_settings.API_V1_PREFIX}/positions", tags=["positions"])
+app.include_router(system.router, prefix=f"{app_settings.API_V1_PREFIX}/system", tags=["system"])
+app.include_router(settings_api.router, prefix=f"{app_settings.API_V1_PREFIX}/settings", tags=["settings"])
+app.include_router(models.router, prefix=f"{app_settings.API_V1_PREFIX}/models", tags=["models"])
 
 
 # 定时任务调度器
@@ -63,16 +65,16 @@ def run_trading_task():
 
 
 # 启动调度器（如果启用）
-if settings.SCHEDULER_ENABLED:
+if app_settings.SCHEDULER_ENABLED:
     scheduler.add_job(
         run_trading_task,
-        trigger=IntervalTrigger(minutes=settings.SCHEDULER_INTERVAL_MINUTES),
+        trigger=IntervalTrigger(minutes=app_settings.SCHEDULER_INTERVAL_MINUTES),
         id='trading_task',
         name='定时交易任务',
         replace_existing=True
     )
     scheduler.start()
-    print(f"✅ 定时任务调度器已启动 (每 {settings.SCHEDULER_INTERVAL_MINUTES} 分钟执行一次)")
+    print(f"✅ 定时任务调度器已启动 (每 {app_settings.SCHEDULER_INTERVAL_MINUTES} 分钟执行一次)")
     
     # 注册关闭钩子
     atexit.register(lambda: scheduler.shutdown())

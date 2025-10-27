@@ -10,6 +10,7 @@ export default function Navigation() {
     { href: '/', label: '📊 仪表盘' },
     { href: '/models', label: '🎯 模型对比' },
     { href: '/system', label: '⚙️ 系统管理' },
+    { href: '/settings', label: '🎛️ 系统设置' },
   ];
 
   return (

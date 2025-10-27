@@ -74,7 +74,7 @@ export default function ModelsPage() {
     } else if (selectedModel) {
       loadModelDetails(selectedModel);
     }
-  }, [selectedModel, portfolios]); // 添加 portfolios 依赖
+  }, [selectedModel]);
 
   useEffect(() => {
     if (!allHistoryData || allHistoryData.length === 0) {
@@ -140,20 +140,7 @@ export default function ModelsPage() {
           const dataPoint: any = { timestamp };
           models.forEach(model => {
             const item = historyData[model].find((h: any) => h.timestamp === timestamp);
-            if (item) {
-              // 总价值
-              dataPoint[model] = item.total_value;
-              // 详细信息（余额、持仓价值等）
-              dataPoint[`${model}_detail`] = {
-                balance: item.balance,
-                position_value: item.position_value,
-                pnl: item.pnl,
-                pnl_percent: item.pnl_percent
-              };
-            } else {
-              dataPoint[model] = null;
-              dataPoint[`${model}_detail`] = null;
-            }
+            dataPoint[model] = item ? item.total_value : null;
           });
           chartData.push(dataPoint);
         });
@@ -164,36 +151,8 @@ export default function ModelsPage() {
         setPortfolioHistory(chartData);
       }
       
-      // 默认选择"全部"模式，并加载所有模型的数据
+      // 默认选择"全部"模式
       setSelectedModel('all');
-      
-      // 立即加载所有模型的数据
-      const allDecs: Decision[] = [];
-      const allPos: Position[] = [];
-      
-      for (const portfolio of portfoliosRes.data) {
-        try {
-          // 加载决策历史
-          const decisionsRes = await decisionApi.getDecisions(portfolio.model_name);
-          const modelDecisions = decisionsRes.data?.items || decisionsRes.data || [];
-          allDecs.push(...modelDecisions);
-          
-          // 加载持仓
-          const positionsRes = await positionsApi.getPositions(portfolio.model_name);
-          const modelPositions = positionsRes.data?.items || positionsRes.data || [];
-          allPos.push(...modelPositions);
-        } catch (error) {
-          console.error(`Error loading data for ${portfolio.model_name}:`, error);
-        }
-      }
-      
-      // 按时间倒序排序
-      allDecs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
-      setAllDecisions(allDecs);
-      setAllPositions(allPos);
-      setDecisions(allDecs);
-      setPositions(allPos);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -613,12 +572,14 @@ export default function ModelsPage() {
                   ${portfolio.total_value.toFixed(2)}
                 </div>
                 <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  {(portfolio.daily_pnl ?? 0) >= 0 ? '+' : ''}{(portfolio.daily_pnl ?? 0).toFixed(2)} ({(portfolio.total_return ?? 0).toFixed(2)}%)
+                  {portfolio.pnl >= 0 ? '+' : ''}{portfolio.pnl.toFixed(2)} ({portfolio.pnl_percent.toFixed(2)}%)
                 </div>
               </div>
             ))}
           </div>
         </div>
+      </div>
+    </div>
 
       {/* Modal */}
       {modalOpen && modalContent && (
@@ -817,9 +778,7 @@ function EChartsComponent({
     if (!historyData || historyData.length === 0) {
       return {
         xAxisData: [],
-        series: portfolios.map(() => ({ data: [] })),
-        balanceSeries: portfolios.map(() => ({ data: [] })),
-        positionSeries: portfolios.map(() => ({ data: [] }))
+        series: portfolios.map(() => ({ data: [] }))
       };
     }
 
@@ -831,7 +790,7 @@ function EChartsComponent({
     // X轴数据（时间）
     const xAxisData = historyData.map((item: any) => item.timestamp);
     
-    // 每个模型的总价值数据
+    // 每个模型的数据
     const series = portfolios.map((portfolio) => ({
       name: portfolio.model_name,
       type: 'line',
@@ -854,47 +813,7 @@ function EChartsComponent({
       }
     }));
 
-    // 每个模型的余额数据
-    const balanceSeries = portfolios.map((portfolio) => ({
-      name: `${portfolio.model_name} - 余额`,
-      type: 'line',
-      data: historyData.map((item: any) => {
-        const modelData = item[`${portfolio.model_name}_detail`];
-        return modelData?.balance !== null && modelData?.balance !== undefined ? modelData.balance : null;
-      }),
-      smooth: false,
-      symbol: 'none',
-      symbolSize: 0,
-      lineStyle: {
-        width: 1,
-        type: 'dashed'
-      },
-      emphasis: {
-        focus: 'series'
-      }
-    }));
-
-    // 每个模型的持仓价值数据
-    const positionSeries = portfolios.map((portfolio) => ({
-      name: `${portfolio.model_name} - 持仓`,
-      type: 'line',
-      data: historyData.map((item: any) => {
-        const modelData = item[`${portfolio.model_name}_detail`];
-        return modelData?.position_value !== null && modelData?.position_value !== undefined ? modelData.position_value : null;
-      }),
-      smooth: false,
-      symbol: 'none',
-      symbolSize: 0,
-      lineStyle: {
-        width: 1,
-        type: 'dotted'
-      },
-      emphasis: {
-        focus: 'series'
-      }
-    }));
-
-    return { xAxisData, series, balanceSeries, positionSeries };
+    return { xAxisData, series };
   }, [historyData, portfolios]);
 
   // 渲染图表
@@ -943,19 +862,6 @@ function EChartsComponent({
         return `${month}/${day} ${hours}时`;
       };
 
-      // 格式化时间戳显示
-      const formatTimestamp = (timestamp: string) => {
-        const date = new Date(timestamp);
-        return date.toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit'
-        });
-      };
-
       // 设置配置
       const option: any = {
       tooltip: {
@@ -969,59 +875,19 @@ function EChartsComponent({
         formatter: (params: any) => {
           if (!Array.isArray(params)) return '';
           let result = formatTimestamp(params[0].axisValue) + '<br/>';
-          
-          // 按模型分组显示详细信息
-          const modelGroups: {[key: string]: any[]} = {};
           params.forEach((param: any) => {
-            const modelName = param.seriesName.split(' - ')[0];
-            if (!modelGroups[modelName]) {
-              modelGroups[modelName] = [];
-            }
-            modelGroups[modelName].push(param);
-          });
-          
-          Object.keys(modelGroups).forEach(modelName => {
-            const group = modelGroups[modelName];
-            const totalValueParam = group.find(p => !p.seriesName.includes(' - '));
-            const balanceParam = group.find(p => p.seriesName.includes(' - 余额'));
-            const positionParam = group.find(p => p.seriesName.includes(' - 持仓'));
-            
-            if (totalValueParam && totalValueParam.value !== null) {
-              result += `${totalValueParam.marker} <strong>${modelName}</strong><br/>`;
-              result += `&nbsp;&nbsp;总价值: $${Number(totalValueParam.value).toFixed(2)}<br/>`;
-              
-              if (balanceParam && balanceParam.value !== null) {
-                result += `&nbsp;&nbsp;余额: $${Number(balanceParam.value).toFixed(2)}<br/>`;
-              }
-              
-              if (positionParam && positionParam.value !== null) {
-                result += `&nbsp;&nbsp;持仓: $${Number(positionParam.value).toFixed(2)}<br/>`;
-              }
-              
-              // 计算盈亏信息
-              const pnl = totalValueParam.value - 10000;
-              const pnlPercent = (pnl / 10000) * 100;
-              result += `&nbsp;&nbsp;盈亏: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%)<br/>`;
+            if (param.value !== null && param.value !== undefined) {
+              result += `${param.marker} ${param.seriesName}: $${Number(param.value).toFixed(2)}<br/>`;
             }
           });
-          
           return result;
         }
       },
       legend: {
-        data: [
-          ...portfolios.map(p => p.model_name),
-          ...portfolios.map(p => `${p.model_name} - 余额`),
-          ...portfolios.map(p => `${p.model_name} - 持仓`)
-        ],
+        data: portfolios.map(p => p.model_name),
         top: 10,
         textStyle: {
           color: '#6b7280'
-        },
-        selected: {
-          ...Object.fromEntries(portfolios.map(p => [p.model_name, true])),
-          ...Object.fromEntries(portfolios.map(p => [`${p.model_name} - 余额`, false])),
-          ...Object.fromEntries(portfolios.map(p => [`${p.model_name} - 持仓`, false]))
         }
       },
       grid: {
@@ -1050,22 +916,7 @@ function EChartsComponent({
       },
       yAxis: {
         type: 'value',
-        min: (value: any) => {
-          // 动态计算最小值：10000或数据中的最小值，取较小者
-          const allValues = processedData.series.flatMap(series => 
-            series.data.filter((v: number) => v !== null && v !== undefined)
-          );
-          const minValue = allValues.length > 0 ? Math.min(...allValues) : 10000;
-          return Math.min(10000, minValue);
-        },
-        max: (value: any) => {
-          // 动态计算最大值：10000或数据中的最大值，取较大者
-          const allValues = processedData.series.flatMap(series => 
-            series.data.filter((v: number) => v !== null && v !== undefined)
-          );
-          const maxValue = allValues.length > 0 ? Math.max(...allValues) : 10000;
-          return Math.max(10000, maxValue);
-        },
+        min: 10000,
         axisLabel: {
           formatter: (value: number) => {
             const diff = value - 10000;
@@ -1106,43 +957,16 @@ function EChartsComponent({
           bottom: 10
         }
       ],
-      series: [
-        // 总价值线（主要显示）
-        ...processedData.series.map((s, idx) => ({
-          ...s,
-          itemStyle: {
-            color: ['#3b82f6', '#10b981', '#f59e0b'][idx % 3]
-          },
-          lineStyle: {
-            color: ['#3b82f6', '#10b981', '#f59e0b'][idx % 3],
-            width: 2
-          }
-        })),
-        // 余额线（默认隐藏）
-        ...processedData.balanceSeries.map((s, idx) => ({
-          ...s,
-          itemStyle: {
-            color: ['#93c5fd', '#6ee7b7', '#fcd34d'][idx % 3]
-          },
-          lineStyle: {
-            color: ['#93c5fd', '#6ee7b7', '#fcd34d'][idx % 3],
-            width: 1,
-            type: 'dashed'
-          }
-        })),
-        // 持仓价值线（默认隐藏）
-        ...processedData.positionSeries.map((s, idx) => ({
-          ...s,
-          itemStyle: {
-            color: ['#60a5fa', '#34d399', '#fbbf24'][idx % 3]
-          },
-          lineStyle: {
-            color: ['#60a5fa', '#34d399', '#fbbf24'][idx % 3],
-            width: 1,
-            type: 'dotted'
-          }
-        }))
-      ]
+      series: processedData.series.map((s, idx) => ({
+        ...s,
+        itemStyle: {
+          color: ['#3b82f6', '#10b981', '#f59e0b'][idx % 3]
+        },
+        lineStyle: {
+          color: ['#3b82f6', '#10b981', '#f59e0b'][idx % 3],
+          width: 2
+        }
+      }))
     };
 
       // 设置配置
@@ -1180,3 +1004,4 @@ function EChartsComponent({
   );
 }
 
+}

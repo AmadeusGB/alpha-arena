@@ -18,15 +18,34 @@ async def get_decisions(
     db: Session = Depends(get_db)
 ):
     """获取决策历史"""
+    from app.models.decision import Conversation
+    from app.schemas.decision import ConversationResponse
+    
     service = DecisionService(db)
     decisions = service.get_decision_history(
         model_name=model_name,
         limit=limit,
         offset=offset
     )
+    
+    # 为每个决策加载对话记录
+    decision_responses = []
+    for decision in decisions:
+        decision_dict = DecisionResponse.from_orm(decision).dict()
+        
+        # 查找关联的对话记录
+        conversation = db.query(Conversation).filter(
+            Conversation.decision_id == decision.id
+        ).first()
+        
+        if conversation:
+            decision_dict['conversation'] = ConversationResponse.from_orm(conversation).dict()
+        
+        decision_responses.append(DecisionResponse(**decision_dict))
+    
     return DecisionList(
-        items=[DecisionResponse.from_orm(d) for d in decisions],
-        total=len(decisions)
+        items=decision_responses,
+        total=len(decision_responses)
     )
 
 

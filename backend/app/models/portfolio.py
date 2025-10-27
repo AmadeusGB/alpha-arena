@@ -74,10 +74,10 @@ class StrategyConfig(Base):
     
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     model_name = Column(String(50), nullable=False, unique=True, index=True)
-    params = Column(String)  # JSON格式的策略参数
-    is_active = Column(String(10), default="active")
-    max_position_size = Column(Float, default=0.2)  # 最大仓位比例
+    max_position_percent = Column(Float, default=0.9)  # 最大持仓比例
     stop_loss_percent = Column(Float, default=0.05)  # 止损比例
+    take_profit_percent = Column(Float, default=0.1)  # 止盈比例
+    is_active = Column(String(10), default="active")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     def __repr__(self):
@@ -97,4 +97,22 @@ class SystemLog(Base):
     
     def __repr__(self):
         return f"<SystemLog(level={self.level}, message={self.message})>"
+
+
+class PortfolioHistory(Base):
+    """组合净值历史表"""
+    __tablename__ = "portfolio_history"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    model_name = Column(String(50), nullable=False, index=True)
+    timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    total_value = Column(Float, nullable=False)  # 总资产
+    balance = Column(Float, nullable=False)  # 现金余额
+    position_value = Column(Float, default=0.0)  # 持仓市值
+    pnl = Column(Float, default=0.0)  # 盈亏
+    pnl_percent = Column(Float, default=0.0)  # 盈亏百分比
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    def __repr__(self):
+        return f"<PortfolioHistory(model={self.model_name}, timestamp={self.timestamp}, value={self.total_value})>"
 

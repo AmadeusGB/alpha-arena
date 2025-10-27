@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.portfolio_service import PortfolioService
-from app.schemas.portfolio import ModelPortfolioResponse
+from app.schemas.portfolio import ModelPortfolioResponse, PortfolioHistoryResponse
 
 router = APIRouter()
 
@@ -71,4 +71,49 @@ async def get_performance(
         "total_trades": total_trades,
         "profitable_trades": profitable_trades
     }
+
+
+@router.get("/{model_name}/history")
+async def get_portfolio_history(
+    model_name: str,
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    """获取组合净值历史"""
+    from typing import List
+    service = PortfolioService(db)
+    history = service.get_portfolio_history(model_name, limit=limit)
+    return [PortfolioHistoryResponse.model_validate(h) for h in history]
+
+
+@router.get("/history/all")
+async def get_all_portfolio_history(
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    """获取所有模型的净值历史"""
+    from app.models.portfolio import PortfolioHistory, ModelPortfolio
+    from typing import List, Dict
+    
+    # 获取所有模型
+    portfolios = db.query(ModelPortfolio).all()
+    
+    result = {}
+    for portfolio in portfolios:
+        history = db.query(PortfolioHistory).filter(
+            PortfolioHistory.model_name == portfolio.model_name
+        ).order_by(PortfolioHistory.timestamp.desc()).limit(limit).all()
+        
+        result[portfolio.model_name] = [
+            {
+                "timestamp": h.timestamp.isoformat(),
+                "total_value": h.total_value,
+                "balance": h.balance,
+                "position_value": h.position_value,
+                "pnl": h.pnl,
+                "pnl_percent": h.pnl_percent
+            } for h in history
+        ]
+    
+    return result
 

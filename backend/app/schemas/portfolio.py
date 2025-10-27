@@ -62,8 +62,24 @@ class PerformanceMetrics(BaseModel):
     profitable_trades: int
 
 
+class PortfolioHistoryResponse(BaseModel):
+    """净值历史响应模型"""
+    id: int
+    model_name: str
+    timestamp: datetime
+    total_value: float
+    balance: float
+    position_value: float
+    pnl: float
+    pnl_percent: float
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
 class PortfolioHistory(BaseModel):
-    """净值历史"""
+    """净值历史（旧版，保持兼容）"""
     timestamp: datetime
     value: float
     pnl: float

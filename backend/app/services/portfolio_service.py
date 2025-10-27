@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import List
 from sqlalchemy.orm import Session
-from app.models.portfolio import ModelPortfolio, Position, Trade
+from app.models.portfolio import ModelPortfolio, Position, Trade, PortfolioHistory
 
 
 class PortfolioService:
@@ -141,4 +141,38 @@ class PortfolioService:
         
         self.db.commit()
         return trade
+    
+    def save_portfolio_history(self, model_name: str):
+        """保存组合净值历史记录"""
+        portfolio = self.get_portfolio(model_name)
+        
+        # 计算持仓市值
+        positions = self.db.query(Position).filter(
+            Position.model_name == model_name,
+            Position.status == "open"
+        ).all()
+        
+        position_value = sum(pos.current_price * pos.quantity for pos in positions if pos.current_price)
+        
+        # 创建历史记录
+        history = PortfolioHistory(
+            model_name=model_name,
+            timestamp=datetime.now(),
+            total_value=portfolio.total_value,
+            balance=portfolio.balance,
+            position_value=position_value,
+            pnl=portfolio.total_pnl,
+            pnl_percent=portfolio.total_return
+        )
+        
+        self.db.add(history)
+        self.db.commit()
+        
+        return history
+    
+    def get_portfolio_history(self, model_name: str, limit: int = 1000) -> List[PortfolioHistory]:
+        """获取组合净值历史"""
+        return self.db.query(PortfolioHistory).filter(
+            PortfolioHistory.model_name == model_name
+        ).order_by(PortfolioHistory.timestamp.desc()).limit(limit).all()
 

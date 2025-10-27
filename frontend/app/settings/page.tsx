@@ -39,6 +39,9 @@ export default function SettingsPage() {
   const [modelsLoading, setModelsLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editModel, setEditModel] = useState<any | null>(null);
+  const [testingModel, setTestingModel] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<any | null>(null);
+  const [testModalOpen, setTestModalOpen] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -162,6 +165,25 @@ export default function SettingsPage() {
       console.error('Error saving model:', error);
       setMessage('❌ 保存失败');
       setTimeout(() => setMessage(''), 3000);
+    }
+  };
+
+  const handleTestModel = async (modelId: number) => {
+    setTestingModel(modelId);
+    setTestResult(null);
+    
+    try {
+      const res = await modelsApi.testModel(modelId);
+      setTestResult(res.data);
+      setTestModalOpen(true);
+    } catch (error: any) {
+      setTestResult({
+        success: false,
+        error: error.message || '测试失败'
+      });
+      setTestModalOpen(true);
+    } finally {
+      setTestingModel(null);
     }
   };
 
@@ -499,6 +521,13 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => handleTestModel(model.id)}
+                      disabled={testingModel === model.id}
+                      className="px-3 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded text-sm hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors disabled:opacity-50"
+                    >
+                      {testingModel === model.id ? '测试中...' : '测试'}
+                    </button>
+                    <button
                       onClick={() => {
                         setEditModel(model);
                         setEditModalOpen(true);
@@ -636,6 +665,79 @@ export default function SettingsPage() {
               className="flex-1 px-4 py-2 bg-gray-200 dark:bg-zinc-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-zinc-600 transition-colors"
             >
               取消
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 测试结果 Modal */}
+    {testModalOpen && testResult && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-4">
+            模型测试结果
+          </h2>
+          
+          <div className="space-y-4">
+            {/* 测试状态 */}
+            <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-700">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-lg ${testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {testResult.success ? '✅' : '❌'}
+                </span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+                  {testResult.success ? '测试成功' : '测试失败'}
+                </span>
+              </div>
+              
+              {testResult.response_time && (
+                <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                  响应时间: {(testResult.response_time * 1000).toFixed(0)}ms
+                </div>
+              )}
+            </div>
+
+            {/* 响应内容 */}
+            {testResult.response && (
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                  模型响应:
+                </h3>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <pre className="text-sm text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap overflow-x-auto">
+                    {typeof testResult.response === 'string' 
+                      ? testResult.response 
+                      : JSON.stringify(testResult.response, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* 错误信息 */}
+            {testResult.error && (
+              <div>
+                <h3 className="text-sm font-semibold text-red-700 dark:text-red-400 mb-2">
+                  错误信息:
+                </h3>
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                  <p className="text-sm text-red-800 dark:text-red-300">
+                    {testResult.error}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex gap-4 mt-6">
+            <button
+              onClick={() => {
+                setTestModalOpen(false);
+                setTestResult(null);
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              关闭
             </button>
           </div>
         </div>

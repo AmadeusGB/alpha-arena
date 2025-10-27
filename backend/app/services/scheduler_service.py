@@ -18,6 +18,7 @@ class SchedulerService:
     def __init__(self, db: Session):
         self.db = db
         self.is_running = False
+        self.is_saving_history = False
         self.last_run_time = None
         self.error_count = 0
     
@@ -65,12 +66,58 @@ class SchedulerService:
                     indicators[symbol] = calculate_basic_indicators(price_list)
                     print(f"✅ {symbol} 指标计算完成: RSI={indicators[symbol].get('rsi', 0):.2f}, MACD={indicators[symbol].get('macd', 0):.3f}")
             
-            # 2. 为每个模型生成决策
-            decision_service = DecisionService(self.db)
-            decisions = await decision_service.make_decisions(prices, indicators)
+            # 2. 获取交易设置
+            from app.services.settings_service import SettingsService
+            settings_service = SettingsService(self.db)
+            trading_settings = settings_service.get_settings()
+            trading_settings_dict = {
+                'max_position_percent': trading_settings.max_position_percent,
+                'stop_loss_min': trading_settings.stop_loss_min,
+                'stop_loss_max': trading_settings.stop_loss_max,
+                'take_profit_min': trading_settings.take_profit_min,
+                'take_profit_max': trading_settings.take_profit_max,
+                'min_confidence': trading_settings.min_confidence,
+                'max_open_positions': trading_settings.max_open_positions,
+                'max_drawdown': trading_settings.max_drawdown
+            } if trading_settings else None
             
-            # 3. 根据决策更新持仓（简化版本，实际需要更复杂的逻辑）
+            # 3. 获取所有模型的持仓信息
+            from app.models.portfolio import Position
+            from app.models.model_config import ModelConfig
             portfolio_service = PortfolioService(self.db)
+            
+            # 从数据库获取所有启用的模型
+            enabled_models = self.db.query(ModelConfig).filter(
+                ModelConfig.is_enabled == True,
+                ModelConfig.is_active == True
+            ).all()
+            
+            model_positions = {}
+            for model_config in enabled_models:
+                model_name = model_config.name
+                positions = portfolio_service.get_positions(model_name, status='open')
+                model_positions[model_name] = [
+                    {
+                        'symbol': p.symbol,
+                        'quantity': p.quantity,
+                        'entry_price': p.entry_price,
+                        'current_price': p.current_price or p.entry_price,
+                        'pnl': p.pnl,
+                        'pnl_percent': p.pnl_percent
+                    }
+                    for p in positions
+                ]
+            
+            # 4. 为每个模型生成决策
+            decision_service = DecisionService(self.db)
+            decisions = await decision_service.make_decisions(
+                prices, 
+                indicators,
+                trading_settings_dict,
+                model_positions
+            )
+            
+            # 5. 根据决策更新持仓（简化版本，实际需要更复杂的逻辑）
             for model_name, decision_data in decisions.items():
                 if decision_data and decision_data.get('action') != 'HOLD':
                     symbol = decision_data.get('symbol')
@@ -101,4 +148,33 @@ class SchedulerService:
             self.log_message("ERROR", f"定时任务执行失败: {str(e)}")
         finally:
             self.is_running = False
+    
+    async def run_save_history_task(self):
+        """执行保存净值历史任务"""
+        if self.is_saving_history:
+            return
+        
+        self.is_saving_history = True
+        self.log_message("INFO", "开始保存净值历史")
+        
+        try:
+            portfolio_service = PortfolioService(self.db)
+            
+            # 获取所有模型
+            from app.models.portfolio import ModelPortfolio
+            models = self.db.query(ModelPortfolio).all()
+            
+            for model in models:
+                try:
+                    portfolio_service.save_portfolio_history(model.model_name)
+                    print(f"✅ {model.model_name} 净值历史已保存")
+                except Exception as e:
+                    self.log_message("ERROR", f"模型 {model.model_name} 保存历史失败: {str(e)}")
+            
+            self.log_message("INFO", "净值历史保存完成")
+            
+        except Exception as e:
+            self.log_message("ERROR", f"保存净值历史失败: {str(e)}")
+        finally:
+            self.is_saving_history = False
 

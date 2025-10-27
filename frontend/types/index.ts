@@ -17,6 +17,16 @@ export interface Decision {
   prompt?: string;
   response_raw?: any;
   timestamp: string;
+  conversation?: {
+    id: number;
+    model_name: string;
+    decision_id?: number;
+    prompt: string;
+    response: string;
+    tokens_used?: number;
+    duration_ms?: number;
+    timestamp: string;
+  };
 }
 
 export interface ModelPortfolio {

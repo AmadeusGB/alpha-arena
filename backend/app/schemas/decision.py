@@ -22,21 +22,6 @@ class DecisionCreate(DecisionBase):
     pass
 
 
-class DecisionResponse(DecisionBase):
-    """决策响应模型"""
-    id: int
-    timestamp: datetime
-    
-    class Config:
-        from_attributes = True
-
-
-class DecisionList(BaseModel):
-    """决策列表响应"""
-    items: list[DecisionResponse]
-    total: int
-
-
 class ConversationResponse(BaseModel):
     """对话响应模型"""
     id: int
@@ -50,4 +35,20 @@ class ConversationResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class DecisionResponse(DecisionBase):
+    """决策响应模型"""
+    id: int
+    timestamp: datetime
+    conversation: Optional[ConversationResponse] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class DecisionList(BaseModel):
+    """决策列表响应"""
+    items: list[DecisionResponse]
+    total: int
 

@@ -3,14 +3,17 @@
 """
 import asyncio
 import json
+import os
 from datetime import datetime
 import traceback
 from typing import Dict, List
 from sqlalchemy.orm import Session
 from app.models.decision import Decision, Conversation
+from app.models.model_config import ModelConfig
 from app.core.decision import DecisionMaker
 from app.core.adapters.silicon_adapter import SiliconAdapter
 from app.core.technical_indicators import calculate_basic_indicators
+from app.config import settings as app_settings
 
 
 class DecisionService:
@@ -19,12 +22,6 @@ class DecisionService:
     def __init__(self, db: Session):
         self.db = db
         self.models = {}
-        # 不自动初始化，延迟到首次使用时初始化
-        self._model_configs = [
-            ('qwen3', 'Qwen/Qwen3-32B'),
-            ('deepseek', 'deepseek-ai/DeepSeek-V3.1-Terminus'),
-            ('kimi', 'moonshotai/Kimi-K2-Instruct-0905')
-        ]
     
     def _ensure_models_initialized(self):
         """确保模型已初始化"""
@@ -32,24 +29,103 @@ class DecisionService:
             self._initialize_models()
     
     def _initialize_models(self):
-        """初始化模型"""
-        print(f"🔄 开始初始化 {len(self._model_configs)} 个模型...")
-        for model_name, model_id in self._model_configs:
+        """从数据库初始化模型"""
+        # 从数据库获取所有启用的模型配置
+        model_configs = self.db.query(ModelConfig).filter(
+            ModelConfig.is_enabled == True,
+            ModelConfig.is_active == True
+        ).all()
+        
+        if not model_configs:
+            print("⚠️ 数据库中没有启用的模型配置，尝试创建默认模型...")
+            self._create_default_models()
+            # 重新查询
+            model_configs = self.db.query(ModelConfig).filter(
+                ModelConfig.is_enabled == True,
+                ModelConfig.is_active == True
+            ).all()
+        
+        print(f"🔄 开始初始化 {len(model_configs)} 个模型...")
+        
+        for model_config in model_configs:
             try:
-                print(f"🔄 正在初始化 {model_name} ({model_id})...")
-                adapter = SiliconAdapter(model=model_id)
+                model_name = model_config.name
+                print(f"🔄 正在初始化 {model_name} ({model_config.model_id})...")
+                
+                # 临时设置环境变量以使用模型的特定配置
+                original_api_key = os.environ.get('SILICONFLOW_API_KEY')
+                original_base_url = os.environ.get('SILICONFLOW_BASE_URL')
+                
+                # 使用模型配置的 API 密钥和基础 URL
+                if model_config.api_key:
+                    os.environ['SILICONFLOW_API_KEY'] = model_config.api_key
+                if model_config.base_url:
+                    os.environ['SILICONFLOW_BASE_URL'] = model_config.base_url
+                
+                # 创建适配器
+                adapter = SiliconAdapter(model=model_config.model_id)
                 decision_maker = DecisionMaker(adapter)
                 self.models[model_name] = decision_maker
-                print(f"✅ 模型 {model_name} 初始化成功 (模型ID: {model_id})")
+                
+                # 恢复原始环境变量
+                if original_api_key:
+                    os.environ['SILICONFLOW_API_KEY'] = original_api_key
+                elif 'SILICONFLOW_API_KEY' in os.environ:
+                    del os.environ['SILICONFLOW_API_KEY']
+                    
+                if original_base_url:
+                    os.environ['SILICONFLOW_BASE_URL'] = original_base_url
+                elif 'SILICONFLOW_BASE_URL' in os.environ:
+                    del os.environ['SILICONFLOW_BASE_URL']
+                
+                print(f"✅ 模型 {model_name} 初始化成功 (模型ID: {model_config.model_id})")
             except Exception as e:
-                print(f"❌ 模型 {model_name} 初始化失败: {e}")
+                print(f"❌ 模型 {model_config.name} 初始化失败: {e}")
                 import traceback
                 traceback.print_exc()
         
-        print(f"✅ 模型初始化完成，成功初始化 {len(self.models)}/{len(self._model_configs)} 个模型")
+        print(f"✅ 模型初始化完成，成功初始化 {len(self.models)}/{len(model_configs)} 个模型")
         print(f"   已初始化的模型: {list(self.models.keys())}")
     
-    async def make_decision_for_model(self, model_name: str, prices: Dict[str, float], indicators: Dict[str, Dict] = None) -> Dict:
+    def _create_default_models(self):
+        """创建默认模型配置"""
+        default_models = [
+            ('qwen3', 'Qwen/Qwen3-32B', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL),
+            ('deepseek', 'deepseek-ai/DeepSeek-V3.1-Terminus', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL),
+            ('kimi', 'moonshotai/Kimi-K2-Instruct-0905', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL)
+        ]
+        
+        for name, model_id, api_key, base_url in default_models:
+            # 检查是否已存在
+            existing = self.db.query(ModelConfig).filter(ModelConfig.name == name).first()
+            if existing:
+                print(f"  ℹ️ 模型 {name} 已存在，跳过创建")
+                continue
+            
+            # 创建新模型配置
+            model_config = ModelConfig(
+                name=name,
+                provider='siliconflow',
+                model_id=model_id,
+                api_key=api_key,
+                base_url=base_url,
+                is_enabled=True,
+                is_active=True
+            )
+            self.db.add(model_config)
+            print(f"  ✅ 创建默认模型: {name}")
+        
+        self.db.commit()
+        print(f"✅ 默认模型配置创建完成")
+    
+    async def make_decision_for_model(
+        self, 
+        model_name: str, 
+        prices: Dict[str, float], 
+        indicators: Dict[str, Dict] = None,
+        trading_settings: Dict = None,
+        current_positions: list = None
+    ) -> Dict:
         """为特定模型生成决策"""
         self._ensure_models_initialized()
         
@@ -57,7 +133,12 @@ class DecisionService:
             return {}
         
         decision_maker = self.models[model_name]
-        prompt = decision_maker.build_prompt(prices, indicators)
+        prompt = decision_maker.build_prompt(
+            prices, 
+            indicators,
+            trading_settings,
+            current_positions
+        )
         
         try:
             print(f"🔄 模型 {model_name} 开始生成决策...")
@@ -101,10 +182,13 @@ class DecisionService:
                 response_raw=decision_data
             )
             self.db.add(decision)
+            # 刷新以获取 decision.id
+            self.db.flush()
             
-            # 保存对话记录
+            # 保存对话记录，关联到决策
             conversation = Conversation(
                 model_name=model_name,
+                decision_id=decision.id,
                 prompt=prompt,
                 response=response
             )
@@ -127,14 +211,30 @@ class DecisionService:
             print(f"错误堆栈:\n{traceback.format_exc()}")
             return {}
     
-    async def make_decisions(self, prices: Dict[str, float], indicators: Dict[str, Dict] = None) -> Dict[str, Dict]:
+    async def make_decisions(
+        self, 
+        prices: Dict[str, float], 
+        indicators: Dict[str, Dict] = None,
+        trading_settings: Dict = None,
+        model_positions: Dict[str, list] = None
+    ) -> Dict[str, Dict]:
         """为所有模型生成决策（并发执行）"""
         self._ensure_models_initialized()
         
         # 创建并发任务
         tasks = []
         for model_name in self.models.keys():
-            tasks.append(self.make_decision_for_model(model_name, prices, indicators))
+            # 获取该模型的持仓信息
+            current_positions = model_positions.get(model_name, []) if model_positions else []
+            tasks.append(
+                self.make_decision_for_model(
+                    model_name, 
+                    prices, 
+                    indicators,
+                    trading_settings,
+                    current_positions
+                )
+            )
         
         # 并发执行所有模型决策
         print(f"🚀 开始并发调用 {len(tasks)} 个模型...")

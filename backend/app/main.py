@@ -59,22 +59,49 @@ def run_trading_task():
         import asyncio
         asyncio.run(service.run_scheduled_task())
     except Exception as e:
-        print(f"❌ 定时任务执行出错: {e}")
+        print(f"❌ 交易任务执行出错: {e}")
+    finally:
+        db.close()
+
+
+def run_save_history_task():
+    """执行保存净值历史任务"""
+    db = SessionLocal()
+    try:
+        service = SchedulerService(db)
+        import asyncio
+        asyncio.run(service.run_save_history_task())
+    except Exception as e:
+        print(f"❌ 保存历史任务执行出错: {e}")
     finally:
         db.close()
 
 
 # 启动调度器（如果启用）
 if app_settings.SCHEDULER_ENABLED:
+    # 任务1: 交易决策任务 - 每30秒执行一次
+    import datetime
     scheduler.add_job(
         run_trading_task,
-        trigger=IntervalTrigger(minutes=app_settings.SCHEDULER_INTERVAL_MINUTES),
+        trigger=IntervalTrigger(seconds=30),
         id='trading_task',
-        name='定时交易任务',
+        name='交易决策任务',
         replace_existing=True
     )
+    
+    # 任务2: 保存净值历史任务 - 每30秒执行一次
+    scheduler.add_job(
+        run_save_history_task,
+        trigger=IntervalTrigger(seconds=60),
+        id='save_history_task',
+        name='保存净值历史任务',
+        replace_existing=True
+    )
+    
     scheduler.start()
-    print(f"✅ 定时任务调度器已启动 (每 {app_settings.SCHEDULER_INTERVAL_MINUTES} 分钟执行一次)")
+    print(f"✅ 定时任务调度器已启动:")
+    print(f"   - 交易决策任务: 每 30 秒执行一次")
+    print(f"   - 保存净值历史任务: 每 30 秒执行一次")
     
     # 注册关闭钩子
     atexit.register(lambda: scheduler.shutdown())

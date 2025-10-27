@@ -175,12 +175,12 @@ class BitgetAPIClient:
             mix_symbol = f"{symbol}_UMCBL"
         
         # 优先尝试现货端点（更简单且稳定）
-        try:
-            price = self._get_spot_price(symbol)
-            if price > 0:
-                return price
-        except Exception as e:
-            print(f"⚠️ 现货端点失败: {e}")
+        # try:
+        #     price = self._get_spot_price(symbol)
+        #     if price > 0:
+        #         return price
+        # except Exception as e:
+        #     print(f"⚠️ 现货端点失败: {e}")
         
         # 如果现货失败，尝试合约端点
         try:

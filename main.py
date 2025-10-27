@@ -60,7 +60,7 @@ def main():
         # 如需修改模型，请在此处添加或修改模型配置
         silicon_models = [
             ('qwen3', 'Qwen/Qwen3-32B'),  # Qwen3 模型
-            ('deepseek', 'deepseek-ai/DeepSeek-R1'),  # DeepSeek 模型
+            ('deepseek', 'deepseek-ai/DeepSeek-V3.1-Terminus'),  # DeepSeek 模型
             ('kimi', 'moonshotai/Kimi-K2-Instruct-0905')  # Kimi 模型
         ]
         

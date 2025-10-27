@@ -23,40 +23,61 @@ class DecisionMaker:
         self.llm_adapter = llm_adapter
         self.model_name = llm_adapter.get_model_name()
     
-    def build_prompt(self, market_data: Dict[str, float]) -> str:
+    def build_prompt(self, market_data: Dict[str, float], indicators: Dict[str, Dict] = None) -> str:
         """
         构建交易决策提示词
         
         Args:
             market_data: 市场数据字典
+            indicators: 技术指标字典，格式为 {symbol: {indicators...}}
             
         Returns:
             构建的提示词
         """
+        # 构建市场数据部分
+        market_info = []
+        for symbol in ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT']:
+            price = market_data.get(symbol, 0)
+            if indicators and symbol in indicators:
+                ind = indicators[symbol]
+                market_info.append(
+                    f"{symbol} - current_price: {price:.2f}, "
+                    f"ema20: {ind.get('ema20', 0):.2f}, "
+                    f"macd: {ind.get('macd', 0):.3f}, "
+                    f"rsi: {ind.get('rsi', 50):.2f}"
+                )
+            else:
+                market_info.append(f"{symbol} - current_price: ${price:.4f}")
+        
+        market_section = "\n".join(market_info)
+        
         prompt = f"""
-你是专业的量化交易分析师，请根据当前市场价格给出交易决策。
+You are a professional quantitative trading analyst. Analyze the current market data and provide a trading decision.
 
-当前市场价格：
-- BTCUSDT: ${market_data.get('BTCUSDT', 0):.4f}
-- ETHUSDT: ${market_data.get('ETHUSDT', 0):.4f}
-- XRPUSDT: ${market_data.get('XRPUSDT', 0):.4f}
-- BNBUSDT: ${market_data.get('BNBUSDT', 0):.4f}
-- SOLUSDT: ${market_data.get('SOLUSDT', 0):.4f}
+**CURRENT MARKET DATA:**
+{market_section}
 
-请以JSON格式返回你的交易决策：
+**TRADING INSTRUCTIONS:**
+- Analyze technical indicators (EMA, MACD, RSI)
+- Consider price trends and momentum
+- Identify the best trading opportunity among available symbols
+- Decide whether to BUY, SELL, or HOLD
+
+**OUTPUT REQUIREMENTS:**
+Return ONLY a valid JSON object with the following structure:
 {{
     "symbol": "BTCUSDT|ETHUSDT|XRPUSDT|BNBUSDT|SOLUSDT|null",
     "action": "BUY|SELL|HOLD",
-    "confidence": 0.0-1.0,
-    "rationale": "简短理由（不超过50字）"
+    "confidence": <number between 0.0 and 1.0>,
+    "rationale": "<brief explanation in less than 50 characters>"
 }}
 
-注意事项：
-1. 只返回JSON，不要其他文字
-2. symbol为null表示不选择任何代币
-3. action为HOLD表示持有/观望
-4. confidence表示决策信心度
-5. rationale给出决策理由
+**RULES:**
+1. symbol: Choose one of BTCUSDT, ETHUSDT, XRPUSDT, BNBUSDT, SOLUSDT, or null for no action
+2. action: BUY (open long position), SELL (close position), or HOLD (maintain current state)
+3. confidence: Your confidence in this decision (0.0 to 1.0)
+4. rationale: Brief reasoning for your decision
+5. Return ONLY the JSON object, no additional text or explanation
 
 JSON:
 """

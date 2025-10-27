@@ -5,210 +5,359 @@
 
 [![Version](https://img.shields.io/badge/version-v0.1.0--MVP-blue.svg)](VERSION.md)
 [![Status](https://img.shields.io/badge/status-开发中-yellow.svg)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](requirements.txt)
+[![Python](https://img.shields.io/badge/python-3.9+-green.svg)](backend/requirements.txt)
+[![Next.js](https://img.shields.io/badge/next.js-14+-black.svg)](frontend/package.json)
 
 ---
 
 ## 📘 项目简介
 
 **Alpha Arena** 是一个以真实市场为测试场的 AI 智能体交易实验平台。  
-每个模型（如 GPT-5、Claude、DeepSeek、Gemini 等）都会获得相同的实时市场数据与初始资金，独立决策、执行交易，并实时比较收益、回撤和风险控制能力。
+每个模型（如 GPT-4、Claude、DeepSeek、Qwen、Kimi 等）都会获得相同的实时市场数据与初始资金，独立决策、执行交易，并实时比较收益、回撤和风险控制能力。
 
-### 🎯 MVP 目标与边界
+### 🎯 核心功能
 
-**核心目标（能跑、可比、可复现）：**
-1. 同一时刻、同一数据、同一规则下，让 2–6 个 LLM 给出**统一结构化交易决策**
-2. 对每个模型维持**独立资金账户**，执行撮合并**实时统计净值曲线**与核心指标
-3. **全链路可追溯**：每个决策可回看 Prompt、上下文行情快照、执行回报
-
-**MVP 边界（先不做）：**
-- 不做杠杆/合约（先用现货 **BTCUSDT/ETHUSDT** 两个标的）
-- 不做做空（先做多或空仓）
-- 不做复杂下单类型（先用市价单 + 固定滑点假设）
-- 决策周期固定（如**每 5 分钟**一次），统一同根时钟
-
-### 🔬 探索方向
-
-该项目旨在探索：
-- 大语言模型是否能在真实金融市场中形成可持续的交易逻辑
-- 不同模型在风险、反应速度、决策稳定性方面的差异
-- 如何通过强化学习、策略蒸馏等手段让 AI 智能体不断进化
+1. **实时市场数据**：从 Bitget 交易所获取 BTCUSDT、ETHUSDT 等代币的实时价格
+2. **多模型决策**：支持多个 AI 模型（SiliconFlow 适配的 Qwen、DeepSeek、Kimi 等）同时生成交易决策
+3. **独立投资组合**：每个模型拥有独立的资金账户和持仓
+4. **实时监控**：可视化仪表盘显示市场数据、模型表现和系统状态
+5. **定时调度**：每 5 分钟自动执行一次交易决策流程
 
 ---
 
-## 🏗️ 系统架构
+## 🏗️ 项目架构
 
 ```
-/arena-mvp
-├─ apps/
-│  ├─ orchestrator/        # 调度器（定时拉数据、调用LLM、收单、风控、记账）
-│  ├─ exchange_adapter/    # 交易所适配（Bitget/OKX/CCXT任选其一，先接 paper）
-│  ├─ llm_gateway/         # LLM统一网关（OpenAI/DeepSeek/Anthropic/Google 等）
-│  ├─ portfolio/           # 账本&风控（每模型一账本）
-│  └─ dashboard/           # 简易可视化（Streamlit 或极简React前端）
-├─ storage/
-│  ├─ postgres/            # 交易、K线、模型输出、成交、资产…表
-│  └─ redis/               # 短期队列/去重/限速
-├─ docker-compose.yml
-└─ README.md
+alpha-arena/
+├── backend/                    # 后端服务
+│   ├── app/                   # 应用主代码
+│   │   ├── api/              # API 路由
+│   │   │   ├── decisions.py  # 决策 API
+│   │   │   ├── market.py     # 市场数据 API
+│   │   │   ├── portfolios.py # 投资组合 API
+│   │   │   ├── positions.py  # 持仓 API
+│   │   │   └── system.py     # 系统管理 API
+│   │   ├── core/             # 核心业务逻辑
+│   │   │   ├── adapters/     # 适配器
+│   │   │   │   ├── silicon_adapter.py  # SiliconFlow 适配
+│   │   │   │   ├── exchange_api.py     # 交易所 API
+│   │   │   │   └── llm_base.py         # LLM 基类
+│   │   │   ├── decision.py   # 决策生成
+│   │   │   └── market.py     # 市场数据处理
+│   │   ├── models/           # 数据库模型
+│   │   ├── schemas/          # Pydantic 模式
+│   │   ├── services/         # 业务服务
+│   │   │   ├── decision_service.py    # 决策服务
+│   │   │   ├── market_service.py      # 市场服务
+│   │   │   ├── portfolio_service.py   # 投资组合服务
+│   │   │   └── scheduler_service.py   # 调度器服务
+│   │   ├── config.py         # 配置管理
+│   │   ├── database.py       # 数据库连接
+│   │   └── main.py           # FastAPI 应用入口
+│   ├── alembic/              # 数据库迁移
+│   ├── Dockerfile            # Docker 镜像
+│   ├── requirements.txt      # Python 依赖
+│   └── init_database.sh      # 数据库初始化脚本
+├── frontend/                  # 前端服务
+│   ├── app/                  # Next.js 应用
+│   │   ├── page.tsx         # 首页（市场与模型表现）
+│   │   ├── models/          # 模型页面
+│   │   └── system/          # 系统管理页面
+│   ├── components/           # React 组件
+│   ├── lib/                  # 工具库
+│   │   └── api.ts           # API 客户端
+│   ├── types/                # TypeScript 类型
+│   ├── package.json         # 依赖管理
+│   └── next.config.js       # Next.js 配置
+├── docker-compose.yml        # Docker Compose 配置
+├── env.example              # 环境变量示例
+└── README.md                # 项目说明
 ```
 
 ### 📋 服务职责
 
 | 模块 | 说明 |
 |------|------|
-| **Orchestrator** | 每 5 分钟触发一次 → 拉两只币最近 60 分钟 K 线 + 当前盘口快照 → 生成统一 Prompt → 并行请求各 LLM → 校验响应 schema → 丢给风控/执行层 |
-| **LLM Gateway** | 为不同家 LLM 适配统一的请求/重试/限速/超时（如 8s 超时，超时=默认 Hold） |
-| **Exchange Adapter** | 先接 **paper-trading**（仿真撮合+固定滑点），可一键切换到 **Bitget 现货实盘** |
-| **Portfolio** | 每模型单独资产账簿（现金、持仓、浮盈），统一费率（如万 5）、统一滑点（如 5–10 bp） |
-| **Dashboard** | 净值曲线、当日 PnL、持仓表、成交表、模型延迟、错误率 |
+| **Market Service** | 从 Bitget API 获取实时价格数据 |
+| **Decision Service** | 调用多个 LLM 模型生成交易决策 |
+| **Portfolio Service** | 管理每个模型的资金账户和持仓 |
+| **Scheduler Service** | 定时执行交易决策流程 |
+| **Position Service** | 处理开仓、平仓等操作 |
+| **Frontend Dashboard** | 实时监控市场数据、模型表现和系统状态 |
 
 ---
 
 ## ⚙️ 技术栈
 
-- **Backend**：Python 3.11 / FastAPI / pandas / asyncio  
-- **Database**：PostgreSQL + Redis  
-- **Frontend**：Streamlit (或 Next.js 可视化面板)  
-- **LLM 接口**：OpenAI / DeepSeek / Anthropic / Google / Qwen  
-- **交易所**：Bitget / OKX / CCXT（paper-trading 优先）
+### 后端
+- **Python 3.9+**
+- **FastAPI** - 高性能 Web 框架
+- **SQLAlchemy** - ORM
+- **Alembic** - 数据库迁移
+- **APScheduler** - 定时任务
+- **PostgreSQL** - 数据库
+- **OpenAI SDK** - LLM 调用
 
----
+### 前端
+- **Next.js 14** - React 框架
+- **TypeScript** - 类型安全
+- **Tailwind CSS** - 样式框架
+- **React Hooks** - 状态管理
 
-## 📊 交易规范
-
-### 🎯 统一 Prompt 与输出规范
-
-**系统 Prompt（摘要版）：**
-```
-System: 你是量化交易代理，请在唯一JSON中输出交易指令，严格遵守schema。
-Market Time (UTC): {ts}
-Account: cash_usdt: {cash}, positions: [{symbol, qty, avg_px}]
-Universe: [BTCUSDT, ETHUSDT] (spot only)
-Last 60m 1m-bars (ohlcv): {per-symbol arrays}
-Live Ticker: {bid, ask, mid, spread_bp}
-Fees: 5 bp; Slippage: 10 bp (est.)
-Constraints:
-  - Decision cadence: 5m once
-  - Max gross exposure: 20% of NAV per trade
-  - Long only, at most 1 open symbol
-  - Provide TP/SL as absolute prices
-Task: If have position: hold/close with reasons; If flat: buy/hold with reasons
-Return JSON only. No extra text.
-```
-
-**输出 Schema（严格校验）：**
-```json
-{
-  "symbol": "BTCUSDT|ETHUSDT|null",
-  "action": "BUY|SELL|HOLD",
-  "position_size_pct": 0.0,
-  "take_profit": 0.0,
-  "stop_loss": 0.0,
-  "confidence": 0.0,
-  "rationale": "short text (<=200 chars)"
-}
-```
-
-### ⚖️ 风控与执行规则
-
-- **初始资金**：每模型 USDT 10,000
-- **单次下单**：不超过净值 20%
-- **持仓限制**：最多同时持 1 个标的
-- **止损止盈**：模型给出，风控兜底强平阈值 -5%
-- **手续费**：万 5
-- **滑点**：10bp（paper-trading）
-- **去重**：5 分钟内仅一次新决策
-- **超时处理**：LLM 超时 8s → 默认 HOLD
-
-### 📈 评价指标
-
-**实时指标：**
-- 净值、当日 PnL、持仓、暴露比例
-- 上次推理延迟/超时率
-
-**阶段统计：**
-- 累计收益、最大回撤（MDD）
-- Calmar/Sharpe 比率
-- 胜率、平均盈亏比、交易次数
-- 平均持仓时长、滑点/费率占比
-
-**合规性指标：**
-- 越权（超额下单）、JSON 违规、超时、拒答次数
-
----
-
-## 🚀 实现计划（5-7 天可跑）
-
-| 天数 | 任务 |
-|------|------|
-| **Day 1** | 初始化仓库与 Docker；建表（trades, positions, nav, prompts, decisions, metrics）；接交易所（paper）+ 行情抓取 |
-| **Day 2** | 完成 Orchestrator 基本循环（5m 定时、行情→Prompt→LLM→schema→执行→记账）；接入 1 家 LLM 跑通 E2E |
-| **Day 3** | 接入 2–3 家 LLM；并行推理、超时回退、JSON 校验；完成风控兜底（限仓、止盈止损、强平） |
-| **Day 4** | Dashboard（Streamlit）+ 指标计算（实时+日内）；审计追溯视图（Prompt/JSON/行情快照） |
-| **Day 5-7** | 稳定性与回测回灌测试；可选切换 **Bitget 现货实盘**（极小资金验证成交路径） |
-
----
-
-## 🔧 关键配置
-
-| 参数 | 默认值 |
-|------|--------|
-| 决策周期 | **5m** |
-| 标的 | **BTCUSDT、ETHUSDT（现货）** |
-| 初始资金 | **$10,000 / 模型** |
-| 单笔最大下单 | **20% NAV** |
-| 手续费 | **万 5**（paper） |
-| 滑点 | **10 bp**（paper） |
-| 强平阈值 | **-5%** |
-| LLM 超时 | **8s**；超时→HOLD |
-| 并发 | **按模型并行**，串行写库 |
-
----
-
-## 🛡️ 合规与安全
-
-- **只读 API Key** + 现货、单向做多
-- **隔离资金**：每模型独立子账户 / 子账本
-- **Kill-Switch**：净值回撤超过 10% 立即停机（全平+禁用新单）
-- **速率限制**：LLM 与交易所均加限速与熔断
-- **日志**：审计日志落库 + 本地滚动文件备份
+### 基础设施
+- **Docker** - 容器化
+- **Bitget API** - 加密货币交易所
+- **SiliconFlow** - LLM 服务（支持 Qwen、DeepSeek、Kimi 等）
 
 ---
 
 ## 🚀 快速开始
 
-### 当前版本：v0.1.0 (MVP)
+### 前置要求
 
-**最简化MVP**：真实价格获取 + AI决策对比
+- Python 3.9+
+- Node.js 18+
+- Docker & Docker Compose
+- PostgreSQL 数据库
+
+### 安装步骤
+
+#### 1. 克隆项目
 
 ```bash
-# 1. 克隆项目
-git clone https://github.com/AmadeusGB/alpha-arena.git
+git clone https://github.com/yourusername/alpha-arena.git
 cd alpha-arena
-
-# 2. 安装依赖
-pip install -r requirements.txt
-
-# 3. 配置API密钥
-cp env.example .env
-# 编辑.env文件，填入你的API密钥
-
-# 4. 运行程序
-python main.py
 ```
 
-### 📋 版本信息
-- **详细版本说明**：[VERSION.md](VERSION.md)
-- **变更日志**：[CHANGELOG.md](CHANGELOG.md)
-- **当前功能**：5个代币价格获取 + OpenAI vs Claude决策对比
+#### 2. 配置环境变量
+
+```bash
+cp env.example .env
+```
+
+编辑 `.env` 文件，填入必要的 API 密钥：
+
+```env
+# 数据库配置
+DATABASE_URL=postgresql://postgres:POSTGRESQL_PASSWORD@localhost:5433/alpha_arena
+
+# SiliconFlow API
+SILICONFLOW_API_KEY=your_siliconflow_api_key
+SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
+
+# Bitget API（可选）
+BITGET_API_KEY=your_bitget_api_key
+BITGET_SECRET_KEY=your_bitget_secret_key
+BITGET_PASSPHRASE=your_bitget_passphrase
+```
+
+#### 3. 启动数据库
+
+```bash
+docker-compose up -d postgres
+```
+
+#### 4. 初始化数据库
+
+```bash
+cd backend
+source ../.venv/bin/activate  # 如果有虚拟环境
+export DATABASE_URL=postgresql://postgres:POSTGRESQL_PASSWORD@localhost:5433/alpha_arena
+alembic upgrade head
+```
+
+或者使用自动化脚本：
+
+```bash
+bash init_database.sh
+```
+
+#### 5. 启动后端服务
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+后端将在 http://localhost:8000 运行
+
+#### 6. 启动前端服务
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+前端将在 http://localhost:3000 运行
+
+### Docker 部署（推荐）
+
+```bash
+# 启动所有服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+```
 
 ---
 
-## 🔮 后续迭代（非 MVP）
+## 📊 核心功能
 
-- 引入**做空/杠杆**、更多下单类型（限价+冰山）
-- 多时间框（1m+5m+1h）+ 归纳型多轮推理
-- **策略蒸馏**：从 LLM 决策中提取规则/特征，给到轻量 Policy
-- **实盘风控**：交易所回报校验、风控分级、OMS 异常自动降级
-- **公平性工具**：时延对齐、成本对齐、数据漂移告警
+### 1. 实时市场数据
+
+- 获取 BTCUSDT、ETHUSDT、XRPUSDT、BNBUSDT、SOLUSDT 的实时价格
+- 自动定时刷新（每 30 秒）
+- 历史价格数据存储
+
+### 2. 多模型决策
+
+当前支持的模型：
+- **Qwen3** (Qwen/Qwen3-32B)
+- **DeepSeek** (deepseek-ai/DeepSeek-R1)
+- **Kimi** (moonshotai/Kimi-K2-Instruct-0905)
+
+每个模型独立生成交易决策，对比表现差异。
+
+### 3. 投资组合管理
+
+- 每个模型拥有独立的资金账户（初始 10,000 USDT）
+- 实时计算总资产、盈亏、收益率
+- 跟踪最大回撤、Sharpe 比率等指标
+
+### 4. 定时调度
+
+- 每 5 分钟自动执行一次
+- 自动获取市场数据
+- 调用所有模型生成决策
+- 更新持仓和账户状态
+
+### 5. 实时监控
+
+- **市场页面**：显示实时价格和模型表现
+- **模型页面**：详细的模型决策历史
+- **系统管理页面**：调度器控制和系统状态
+
+---
+
+## 🔧 配置说明
+
+### 后端配置
+
+编辑 `backend/app/config.py`：
+
+```python
+# API配置
+API_V1_PREFIX: str = "/api/v1"
+
+# 任务调度配置
+SCHEDULER_ENABLED: bool = True
+SCHEDULER_INTERVAL_MINUTES: int = 5
+
+# 初始资金
+INITIAL_CAPITAL: float = 10000.0
+
+# 支持的交易对
+TRADING_PAIRS: list = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", "SOLUSDT"]
+```
+
+### 前端配置
+
+编辑 `frontend/next.config.js`：
+
+```javascript
+env: {
+  NEXT_PUBLIC_API_URL: 'http://localhost:8000/api/v1',
+}
+```
+
+---
+
+## 📡 API 文档
+
+启动后端服务后，访问：
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+### 主要 API 端点
+
+#### 市场数据
+- `GET /api/v1/market/prices/latest` - 获取最新价格
+- `GET /api/v1/market/prices/history` - 获取历史价格
+
+#### 投资组合
+- `GET /api/v1/portfolios` - 获取所有投资组合
+- `GET /api/v1/portfolios/{model_name}` - 获取特定模型组合
+
+#### 决策
+- `GET /api/v1/decisions` - 获取决策历史
+- `GET /api/v1/decisions/{decision_id}` - 获取决策详情
+
+#### 持仓
+- `GET /api/v1/positions` - 获取所有持仓
+- `GET /api/v1/positions?model_name={name}` - 获取特定模型持仓
+
+#### 系统管理
+- `GET /api/v1/system/status` - 获取系统状态
+- `POST /api/v1/system/scheduler/start` - 启动调度器
+- `POST /api/v1/system/scheduler/stop` - 停止调度器
+
+---
+
+## 🛡️ 安全与合规
+
+- **只读 API**：Bitget API 使用只读权限
+- **隔离账户**：每个模型独立资金账户
+- **安全配置**：敏感信息通过环境变量管理
+- **日志审计**：完整的操作日志记录
+
+---
+
+## 🔮 未来规划
+
+### 短期（1-2 个月）
+- [ ] 支持更多交易所（OKX、Binance）
+- [ ] 添加更多交易策略
+- [ ] 完善风控系统
+- [ ] 性能优化
+
+### 中期（3-6 个月）
+- [ ] 支持杠杆和做空
+- [ ] 回测功能
+- [ ] 策略回放
+- [ ] 实时告警
+
+### 长期（6+ 个月）
+- [ ] AI 策略自动优化
+- [ ] 多时间框架分析
+- [ ] 社群治理
+- [ ] 商业化
+
+---
+
+## 📄 许可
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+---
+
+## 📮 联系方式
+
+- **GitHub**: https://github.com/yourusername/alpha-arena
+- **邮箱**: your.email@example.com
+
+---
+
+**Happy Trading! 📈**

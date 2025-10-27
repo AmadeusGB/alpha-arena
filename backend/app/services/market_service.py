@@ -9,6 +9,17 @@ from app.models.market import MarketPrice
 from app.core.adapters.exchange_api import ExchangeAPI
 
 
+async def _fetch_single_price(exchange_api: ExchangeAPI, symbol: str) -> tuple[str, float]:
+    """并发获取单个代币价格"""
+    try:
+        price = await asyncio.to_thread(exchange_api.get_single_price, symbol)
+        print(f"✅ {symbol}: ${price:.4f}")
+        return symbol, price
+    except Exception as e:
+        print(f"❌ 获取{symbol}价格失败: {e}")
+        return symbol, 0.0
+
+
 class MarketService:
     """市场数据服务"""
     
@@ -17,15 +28,33 @@ class MarketService:
         self.exchange_api = ExchangeAPI()
     
     async def get_latest_prices(self) -> Dict[str, float]:
-        """获取最新价格"""
+        """获取最新价格（并发请求）"""
         try:
-            prices = await asyncio.to_thread(
-                self.exchange_api.get_latest_prices,
-                ["BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", "SOLUSDT"]
-            )
+            symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", "SOLUSDT"]
+            
+            # 创建并发任务
+            tasks = [
+                _fetch_single_price(self.exchange_api, symbol)
+                for symbol in symbols
+            ]
+            
+            print(f"🚀 开始并发获取 {len(symbols)} 个代币价格...")
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 整理结果
+            prices = {}
+            for result in results:
+                if isinstance(result, Exception):
+                    print(f"❌ 价格获取异常: {result}")
+                else:
+                    symbol, price = result
+                    prices[symbol] = price
+            
+            print(f"✅ 价格获取完成，成功: {len([p for p in prices.values() if p > 0])}/{len(prices)}")
             return prices
+            
         except Exception as e:
-            print(f"获取价格失败: {e}")
+            print(f"❌ 获取价格失败: {e}")
             return {}
     
     async def fetch_and_save_prices(self) -> Dict[str, float]:

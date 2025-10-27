@@ -1,5 +1,6 @@
 import os
 import json
+import trace
 from typing import Dict, Any
 from .llm_base import LLMAdapter
 
@@ -22,7 +23,8 @@ class SiliconAdapter(LLMAdapter):
         if not self.api_key:
             raise ValueError("SILICONFLOW_API_KEY 环境变量未设置")
         
-        super().__init__(self.api_key)
+        # 不调用父类初始化，直接设置属性
+        # super().__init__(self.api_key)
         
         self.client = None
         self._initialize_client()
@@ -41,7 +43,7 @@ class SiliconAdapter(LLMAdapter):
             # 这可以避免不必要的API调用和费用
             
         except Exception as e:
-            print(f"❌ SiliconFlow 初始化失败: {e}")
+            print(f"❌ SiliconFlow 初始化失败: {e} {trace.format_exc()}")
             raise
 
     def call(self, prompt: str, **kwargs) -> str:

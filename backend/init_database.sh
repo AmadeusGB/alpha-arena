@@ -4,7 +4,7 @@
 echo "=== Alpha Arena 数据库初始化 ==="
 
 # 加载环境变量
-export DATABASE_URL=postgresql://postgres:POSTGRESQL_PASSWORD@localhost:5432/alpha_arena
+export DATABASE_URL=postgresql://postgres:POSTGRESQL_PASSWORD@localhost:5433/alpha_arena
 
 # 创建数据库（如果不存在）
 echo "检查数据库..."

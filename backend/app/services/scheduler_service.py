@@ -8,6 +8,8 @@ from app.services.market_service import MarketService
 from app.services.decision_service import DecisionService
 from app.services.portfolio_service import PortfolioService
 from app.models.portfolio import SystemLog
+from app.models.market import MarketPrice
+from app.core.technical_indicators import calculate_basic_indicators
 
 
 class SchedulerService:
@@ -47,9 +49,25 @@ class SchedulerService:
                 self.log_message("WARNING", "未能获取价格数据")
                 return
             
+            # 1.5 计算技术指标
+            indicators = {}
+            symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT']
+            for symbol in symbols:
+                # 获取历史价格数据
+                historical_prices = self.db.query(MarketPrice).filter(
+                    MarketPrice.symbol == symbol
+                ).order_by(MarketPrice.timestamp.desc()).limit(50).all()
+                
+                if historical_prices:
+                    # 提取价格列表（从旧到新）
+                    price_list = [p.price for p in reversed(historical_prices)]
+                    # 计算指标
+                    indicators[symbol] = calculate_basic_indicators(price_list)
+                    print(f"✅ {symbol} 指标计算完成: RSI={indicators[symbol].get('rsi', 0):.2f}, MACD={indicators[symbol].get('macd', 0):.3f}")
+            
             # 2. 为每个模型生成决策
             decision_service = DecisionService(self.db)
-            decisions = await decision_service.make_decisions(prices)
+            decisions = await decision_service.make_decisions(prices, indicators)
             
             # 3. 根据决策更新持仓（简化版本，实际需要更复杂的逻辑）
             portfolio_service = PortfolioService(self.db)

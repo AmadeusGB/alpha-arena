@@ -23,7 +23,7 @@ class SiliconAdapter(LLMAdapter):
             raise ValueError("SILICONFLOW_API_KEY 环境变量未设置")
         
         # 不调用父类初始化，避免传递不必要的参数
-        self.api_key_for_base = self.api_key
+        # 直接初始化自己的属性，不调用 super().__init__()
         
         self.client = None
         self._initialize_client()

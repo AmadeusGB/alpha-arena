@@ -46,19 +46,34 @@ async def get_decision(
 @router.post("/trigger")
 async def trigger_decisions(db: Session = Depends(get_db)):
     """手动触发决策"""
-    # 获取最新价格
+    from app.models.market import MarketPrice
+    from app.core.technical_indicators import calculate_basic_indicators
     from app.services.market_service import MarketService
+    
+    # 获取最新价格
     market_service = MarketService(db)
     prices = await market_service.get_latest_prices()
     
     if not prices:
         raise HTTPException(status_code=400, detail="无法获取价格数据")
     
+    # 计算技术指标
+    indicators = {}
+    symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT']
+    for symbol in symbols:
+        historical_prices = db.query(MarketPrice).filter(
+            MarketPrice.symbol == symbol
+        ).order_by(MarketPrice.timestamp.desc()).limit(50).all()
+        
+        if historical_prices:
+            price_list = [p.price for p in reversed(historical_prices)]
+            indicators[symbol] = calculate_basic_indicators(price_list)
+    
     # 生成决策
     service = DecisionService(db)
-    decisions = await service.make_decisions(prices)
+    decisions = await service.make_decisions(prices, indicators)
     
-    return {"decisions": decisions}
+    return {"decisions": decisions, "indicators": indicators}
 
 
 @router.get("/compare")

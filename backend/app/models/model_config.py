@@ -41,6 +41,14 @@ class ModelConfig(Base):
     
     # 其他配置
     params = Column(JSON, default={})  # 额外参数
+
+    # 交易参数
+    trade_symbol = Column(String(50), nullable=True)  # 交易标的，例如 BTCUSDT
+    trade_quantity = Column(Float, nullable=True, default=0.0)  # 交易数量
+    leverage = Column(Integer, nullable=True, default=1)  # 杠杆率
+    trade_side = Column(String(10), nullable=True)  # LONG/SHORT
+    close_price_upper = Column(Float, nullable=True)  # 平仓上价格（止盈价）
+    close_price_lower = Column(Float, nullable=True)  # 平仓下价格（止损价）
     
     # 时间戳
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

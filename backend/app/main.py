@@ -64,6 +64,20 @@ def run_trading_task():
         db.close()
 
 
+def run_fetch_prices_task():
+    """执行获取并保存价格任务"""
+    db = SessionLocal()
+    try:
+        from app.services.market_service import MarketService
+        service = MarketService(db)
+        import asyncio
+        asyncio.run(service.fetch_and_save_prices())
+    except Exception as e:
+        print(f"❌ 获取价格任务执行出错: {e}")
+    finally:
+        db.close()
+
+
 def run_save_history_task():
     """执行保存净值历史任务"""
     db = SessionLocal()
@@ -79,20 +93,32 @@ def run_save_history_task():
 
 # 启动调度器（如果启用）
 if app_settings.SCHEDULER_ENABLED:
-    # 任务1: 交易决策任务 - 每30秒执行一次
-    import datetime
+    # 任务1: 交易决策任务 - 每300秒执行一次
+    trading_interval = 300
+    fetch_prices_interval = 10
+    save_history_interval = 10
     scheduler.add_job(
         run_trading_task,
-        trigger=IntervalTrigger(seconds=30),
+        trigger=IntervalTrigger(seconds=trading_interval),
         id='trading_task',
         name='交易决策任务',
         replace_existing=True
     )
+    # todo 初始化获取近一个月的历史行情数据
+
+    # 任务2: 获取并保存价格任务 - 每10秒执行一次
+    scheduler.add_job(
+        run_fetch_prices_task,
+        trigger=IntervalTrigger(seconds=fetch_prices_interval),
+        id='fetch_prices_task',
+        name='获取并保存价格任务',
+        replace_existing=True
+    )
     
-    # 任务2: 保存净值历史任务 - 每30秒执行一次
+    # 任务3: 保存净值历史任务 - 每60秒执行一次
     scheduler.add_job(
         run_save_history_task,
-        trigger=IntervalTrigger(seconds=60),
+        trigger=IntervalTrigger(seconds=save_history_interval),
         id='save_history_task',
         name='保存净值历史任务',
         replace_existing=True
@@ -100,8 +126,9 @@ if app_settings.SCHEDULER_ENABLED:
     
     scheduler.start()
     print(f"✅ 定时任务调度器已启动:")
-    print(f"   - 交易决策任务: 每 30 秒执行一次")
-    print(f"   - 保存净值历史任务: 每 30 秒执行一次")
+    print(f"   - 交易决策任务: 每 {trading_interval} 秒执行一次")
+    print(f"   - 获取并保存价格任务: 每 {fetch_prices_interval} 秒执行一次")
+    print(f"   - 保存净值历史任务: 每 {save_history_interval} 秒执行一次")
     
     # 注册关闭钩子
     atexit.register(lambda: scheduler.shutdown())

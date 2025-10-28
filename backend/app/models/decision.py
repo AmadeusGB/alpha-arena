@@ -16,8 +16,11 @@ class Decision(Base):
     action = Column(String(10), nullable=False)  # BUY, SELL, HOLD
     confidence = Column(Float)  # 0.0-1.0
     reasoning = Column(Text)  # 决策理由
+    analysis = Column(Text)  # 模型分析（持仓/行情/计划/风险）
     prompt = Column(Text)  # 完整 prompt
     response_raw = Column(JSON)  # LLM 原始响应
+    status = Column(String(20), default="pending")  # 交易状态：pending/completed/failed
+    feedback = Column(Text)  # 失败或交易反馈信息
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
     
     def __repr__(self):

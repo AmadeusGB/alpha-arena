@@ -23,7 +23,6 @@ class ExchangeAPI:
                 secret_key=os.getenv('BITGET_SECRET_KEY'),
                 passphrase=os.getenv('BITGET_PASSPHRASE')
             )
-            print("✅ Bitget API客户端初始化成功")
         except Exception as e:
             print(f"❌ Bitget API客户端初始化失败: {e}")
             self.client = None

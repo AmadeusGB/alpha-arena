@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.scheduler_service import SchedulerService
 from app.config import settings
+from typing import Optional
 
 router = APIRouter()
 
@@ -93,4 +94,65 @@ async def get_logs(
         }
         for log in logs
     ]
+
+
+@router.post("/cleanup")
+async def cleanup_data(
+    model_name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """清空交易、对话、持仓记录（可选按模型名过滤）"""
+    from app.models.portfolio import Trade, Position, PortfolioHistory
+    from app.models.decision import Conversation, Decision
+
+    # 删除顺序：trades -> positions -> conversations -> decisions
+    try:
+        if model_name:
+            db.query(Trade).filter(Trade.model_name == model_name).delete(synchronize_session=False)
+            db.query(Position).filter(Position.model_name == model_name).delete(synchronize_session=False)
+            db.query(PortfolioHistory).filter(PortfolioHistory.model_name == model_name).delete(synchronize_session=False)
+            db.query(Conversation).filter(Conversation.model_name == model_name).delete(synchronize_session=False)
+            db.query(Decision).filter(Decision.model_name == model_name).delete(synchronize_session=False)
+        else:
+            db.query(Trade).delete(synchronize_session=False)
+            db.query(Position).delete(synchronize_session=False)
+            db.query(PortfolioHistory).delete(synchronize_session=False)
+            db.query(Conversation).delete(synchronize_session=False)
+            db.query(Decision).delete(synchronize_session=False)
+
+        db.commit()
+        return {"message": "清理完成", "model_name": model_name}
+    except Exception as e:
+        db.rollback()
+        return {"message": f"清理失败: {str(e)}", "model_name": model_name}
+
+
+@router.post("/reset-initial-capital")
+async def reset_initial_capital(
+    model_name: Optional[str] = None,
+    amount: float = 10000.0,
+    db: Session = Depends(get_db)
+):
+    """重置账户初始资金、余额与总资产为指定金额（默认10000）"""
+    from app.models.portfolio import ModelPortfolio
+
+    try:
+        query = db.query(ModelPortfolio)
+        if model_name:
+            query = query.filter(ModelPortfolio.model_name == model_name)
+
+        portfolios = query.all()
+        for p in portfolios:
+            p.initial_capital = amount
+            p.balance = amount
+            p.total_value = amount
+            p.daily_pnl = 0.0
+            p.total_pnl = 0.0
+            p.total_return = 0.0
+
+        db.commit()
+        return {"message": "重置完成", "model_name": model_name, "amount": amount, "updated": len(portfolios)}
+    except Exception as e:
+        db.rollback()
+        return {"message": f"重置失败: {str(e)}", "model_name": model_name}
 

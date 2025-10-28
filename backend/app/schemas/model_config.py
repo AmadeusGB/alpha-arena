@@ -19,6 +19,14 @@ class ModelConfigBase(BaseModel):
     is_enabled: bool = True
     params: Optional[Dict] = {}
 
+    # 交易参数
+    trade_symbol: Optional[str] = None
+    trade_quantity: Optional[float] = 0.0
+    leverage: Optional[int] = 1
+    trade_side: Optional[str] = None  # LONG/SHORT
+    close_price_upper: Optional[float] = None
+    close_price_lower: Optional[float] = None
+
 
 class ModelConfigCreate(ModelConfigBase):
     """创建模型配置"""
@@ -37,6 +45,14 @@ class ModelConfigUpdate(BaseModel):
     timeout: Optional[int] = None
     is_enabled: Optional[bool] = None
     params: Optional[Dict] = None
+
+    # 交易参数（可更新）
+    trade_symbol: Optional[str] = None
+    trade_quantity: Optional[float] = None
+    leverage: Optional[int] = None
+    trade_side: Optional[str] = None
+    close_price_upper: Optional[float] = None
+    close_price_lower: Optional[float] = None
 
 
 class ModelConfigResponse(ModelConfigBase):

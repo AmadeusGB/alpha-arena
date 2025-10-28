@@ -13,8 +13,11 @@ class DecisionBase(BaseModel):
     action: str  # BUY, SELL, HOLD
     confidence: Optional[float] = None
     reasoning: Optional[str] = None
+    analysis: Optional[str] = None
     prompt: Optional[str] = None
     response_raw: Optional[Dict[str, Any]] = None
+    status: Optional[str] = None
+    feedback: Optional[str] = None
 
 
 class DecisionCreate(DecisionBase):
@@ -47,8 +50,26 @@ class DecisionResponse(DecisionBase):
         from_attributes = True
 
 
+class DecisionListItem(BaseModel):
+    """决策列表项（精简版，不包含prompt等大字段）"""
+    id: int
+    model_name: str
+    symbol: Optional[str] = None
+    action: str
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    timestamp: datetime
+    response_raw: Optional[Dict[str, Any]] = None
+    status: Optional[str] = None
+    feedback: Optional[str] = None
+    conversation: Optional['ConversationResponse'] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class DecisionList(BaseModel):
     """决策列表响应"""
-    items: list[DecisionResponse]
+    items: list[DecisionListItem]
     total: int
 

@@ -57,16 +57,10 @@ export default function SystemPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-900 dark:to-black">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
-            ⚙️ 系统管理
-          </h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            定时任务调度和系统状态监控
-          </p>
-        </div>
+    <>
+      <h1 >
+        定时任务调度和系统状态监控
+      </h1>
 
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
@@ -184,8 +178,7 @@ export default function SystemPage() {
             <li>• 记录所有操作到数据库</li>
           </ul>
         </div>
-      </div>
-    </div>
+        </>
   );
 }
 

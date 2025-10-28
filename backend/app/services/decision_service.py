@@ -92,7 +92,7 @@ class DecisionService:
         default_models = [
             ('qwen3', 'Qwen/Qwen3-32B', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL),
             ('deepseek', 'deepseek-ai/DeepSeek-V3.1-Terminus', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL),
-            ('kimi', 'moonshotai/Kimi-K2-Instruct-0905', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL)
+            # ('kimi', 'moonshotai/Kimi-K2-Instruct-0905', app_settings.SILICONFLOW_API_KEY, app_settings.SILICONFLOW_BASE_URL)
         ]
         
         for name, model_id, api_key, base_url in default_models:
@@ -133,22 +133,32 @@ class DecisionService:
             return {}
         
         decision_maker = self.models[model_name]
+        # 账户信息用于在提示词中约束最大下单金额
+        from app.services.portfolio_service import PortfolioService
+        pf_service = PortfolioService(self.db)
+        portfolio = pf_service.get_portfolio(model_name)
+        portfolio_info = {
+            'balance': portfolio.balance,
+            'total_value': portfolio.total_value,
+            'position_value': max(0.0, (portfolio.total_value or 0) - (portfolio.balance or 0)),
+            'max_trade_amount': portfolio.balance
+        }
         prompt = decision_maker.build_prompt(
-            prices, 
+            prices,
             indicators,
             trading_settings,
-            current_positions
+            current_positions,
+            model_trading_params=None,
+            allowed_symbols=None,
+            portfolio_info=portfolio_info
         )
         
         try:
             print(f"🔄 模型 {model_name} 开始生成决策...")
             response = await asyncio.to_thread(decision_maker.llm_adapter.call, prompt)
-            print(f"📥 模型 {model_name} 原始响应: {response[:200]}...")  # 只打印前200字符
-            
             # 尝试解析 JSON
             try:
                 decision_data = json.loads(response)
-                print(f"✅ 模型 {model_name} JSON 解析成功")
             except json.JSONDecodeError as je:
                 print(f"❌ 模型 {model_name} JSON 解析失败: {je}")
                 print(f"完整响应内容: {response}")
@@ -177,9 +187,12 @@ class DecisionService:
                 symbol=decision_data.get('symbol'),
                 action=decision_data.get('action', 'HOLD'),
                 confidence=decision_data.get('confidence'),
-                reasoning=decision_data.get('reasoning'),
+                reasoning=decision_data.get('rationale') or decision_data.get('reasoning'),
+                analysis=decision_data.get('analysis'),
                 prompt=prompt,
-                response_raw=decision_data
+                response_raw=decision_data,
+                status='pending',
+                feedback=None
             )
             self.db.add(decision)
             # 刷新以获取 decision.id
@@ -193,10 +206,30 @@ class DecisionService:
                 response=response
             )
             self.db.add(conversation)
-            
+
+            # 注意：交易创建在 simulate_trade 中完成，并标记为 completed；此处不再写入 pending 交易，避免状态停留在 pending。
+
+            # 打印解析后的关键信息
+            try:
+                symbol = decision_data.get('symbol')
+                action_val = decision_data.get('action')
+                confidence = decision_data.get('confidence')
+                trade_str = None
+                if isinstance(decision_data.get('trade'), dict):
+                    t = decision_data['trade']
+                    trade_str = f"qty={t.get('quantity')}, lev={t.get('leverage')}, dir={t.get('direction')}, entry={t.get('entry_price')}, tp={t.get('close_price_upper')}, sl={t.get('close_price_lower')}"
+                print(f"✅ 解析结果 - {model_name}: action={action_val}, symbol={symbol}, confidence={confidence}, trade=({trade_str})")
+            except Exception as _:
+                pass
+
             self.db.commit()
             print(f"✅ 模型 {model_name} 决策保存成功: {decision_data}")
             
+            # 将决策ID一并返回，供后续下单/状态更新使用
+            try:
+                decision_data['decision_id'] = decision.id
+            except Exception:
+                pass
             return decision_data
             
         except json.JSONDecodeError as je:

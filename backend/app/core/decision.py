@@ -24,11 +24,14 @@ class DecisionMaker:
         self.model_name = llm_adapter.get_model_name()
     
     def build_prompt(
-        self, 
-        market_data: Dict[str, float], 
+        self,
+        market_data: Dict[str, float],
         indicators: Dict[str, Dict] = None,
         trading_settings: Dict = None,
-        current_positions: list = None
+        current_positions: list = None,
+        model_trading_params: Dict = None,
+        allowed_symbols: list = None,
+        portfolio_info: Dict = None
     ) -> str:
         """
         构建交易决策提示词
@@ -42,9 +45,13 @@ class DecisionMaker:
         Returns:
             构建的提示词
         """
+        # 允许的交易标的
+        default_symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT']
+        symbols = allowed_symbols if (allowed_symbols and len(allowed_symbols) > 0) else default_symbols
+
         # 构建市场数据部分
         market_info = []
-        for symbol in ['BTCUSDT', 'ETHUSDT', 'XRPUSDT', 'BNBUSDT', 'SOLUSDT']:
+        for symbol in symbols:
             price = market_data.get(symbol, 0)
             if indicators and symbol in indicators:
                 ind = indicators[symbol]
@@ -97,6 +104,35 @@ class DecisionMaker:
 3. Close positions immediately if market conditions deteriorate significantly
 4. Avoid adding to losing positions
 """
+
+        # 账户状态与交易额度限制
+        account_section = ""
+        if portfolio_info:
+            balance = float(portfolio_info.get('balance', 0) or 0)
+            total_value = float(portfolio_info.get('total_value', 0) or 0)
+            position_value = float(portfolio_info.get('position_value', 0) or 0)
+            max_trade_amount = float(portfolio_info.get('max_trade_amount', balance) or balance)
+            account_section = f"""
+**ACCOUNT STATUS:**
+- Available Cash: ${balance:.2f}
+- Position Market Value: ${position_value:.2f}
+- Total Equity: ${total_value:.2f}
+- MAX_TRADE_AMOUNT (hard cap for this decision): ${max_trade_amount:.2f}
+"""
+
+        # 模型专属交易参数
+        model_params_section = ""
+        if model_trading_params:
+            model_params_section_lines = [
+                "**MODEL TRADING PARAMETERS:**",
+                f"- Preferred Symbol: {model_trading_params.get('trade_symbol') or 'None'}",
+                f"- Quantity: {model_trading_params.get('trade_quantity') if model_trading_params.get('trade_quantity') is not None else 'None'}",
+                f"- Leverage: {model_trading_params.get('leverage') if model_trading_params.get('leverage') is not None else 'None'}x",
+                f"- Side: {model_trading_params.get('trade_side') or 'None'} (LONG/SHORT)",
+                f"- Close Price Upper (TP): {model_trading_params.get('close_price_upper') if model_trading_params.get('close_price_upper') is not None else 'None'}",
+                f"- Close Price Lower (SL): {model_trading_params.get('close_price_lower') if model_trading_params.get('close_price_lower') is not None else 'None'}",
+            ]
+            model_params_section = "\n".join(model_params_section_lines)
         
         prompt = f"""
 You are a professional quantitative trading analyst. Analyze the current market data and provide a trading decision.
@@ -108,33 +144,61 @@ You are a professional quantitative trading analyst. Analyze the current market 
 
 {risk_section}
 
+{account_section}
+
+{model_params_section}
+
 **TRADING INSTRUCTIONS:**
 - Analyze technical indicators (EMA, MACD, RSI)
 - Consider price trends and momentum
 - Identify the best trading opportunity among available symbols
 - Strictly follow the risk control strategy outlined above
 - Decide whether to BUY, SELL, or HOLD
+  - Terminology (Chinese labels for leveraged trading):
+    * BUY with leverage and direction LONG → "开多仓"
+    * SELL with direction SHORT and no existing position → "开空仓"
+    * SELL that closes an existing LONG or BUY that closes an existing SHORT → "平仓"
+    * Non-leveraged opening → "开仓"
 
 **OUTPUT REQUIREMENTS:**
 IMPORTANT: You MUST return ONLY a valid JSON object, without any code blocks, markdown formatting, or additional text.
 
 Return your response in this exact format:
 {{
-    "symbol": "BTCUSDT|ETHUSDT|XRPUSDT|BNBUSDT|SOLUSDT|null",
+    "symbol": "{'|'.join(symbols)}|null",
     "action": "BUY|SELL|HOLD",
     "confidence": <number between 0.0 and 1.0>,
-    "rationale": "<brief explanation in less than 50 characters>"
+    "rationale": "<brief explanation in less than 50 characters>",
+    "analysis": "<current analysis: positions, market, next steps, risk>",
+    "trade": {{
+        "quantity": <number>,
+        "leverage": <integer>,
+        "direction": "LONG|SHORT",  
+        "entry_price": <number>,
+        "close_price_upper": <number|null>,
+        "close_price_lower": <number|null>
+    }},
+    "action_label": "开仓|开多仓|开空仓|平仓|观望"
 }}
 
 **STRICT RULES:**
-1. symbol: Choose one of BTCUSDT, ETHUSDT, XRPUSDT, BNBUSDT, SOLUSDT, or null for no action
-2. action: BUY (open long position), SELL (close position), or HOLD (maintain current state)
+1. symbol: Choose one of {', '.join(symbols)}, or null for no action
+2. action: BUY (open long / close short), SELL (open short / close long), or HOLD
+   When leverage is used, also set action_label as:
+   - 开多仓: BUY with direction LONG and opening a new position
+   - 开空仓: SELL with direction SHORT and opening a new position
+   - 平仓: Closing an existing position (either side)
+   - 开仓: Non-leveraged opening
+   - 观望: HOLD
 3. confidence: Your confidence in this decision (0.0 to 1.0)
 4. rationale: Brief reasoning for your decision
-5. DO NOT use markdown code blocks (```json or ```)
-6. DO NOT include any explanatory text before or after the JSON
-7. Return ONLY the raw JSON object starting with {{ and ending with }}
-8. Make sure your response is valid JSON that can be parsed directly
+5. analysis: Provide a concise paragraph including (positions analysis, market analysis, next action plan, risk management strategy)
+5. trade: Provide full trade details. If action is HOLD, set trade to null or omit it.
+6. DO NOT use markdown code blocks (```json or ```)
+7. DO NOT include any explanatory text before or after the JSON
+8. Return ONLY the raw JSON object starting with {{ and ending with }}
+9. Make sure your response is valid JSON that can be parsed directly
+10. IMPORTANT CONSTRAINT: Ensure (quantity * entry_price) <= MAX_TRADE_AMOUNT and <= Available Cash. If your initial plan exceeds this limit, you MUST reduce quantity accordingly.
 
 Response:
 """
@@ -170,8 +234,7 @@ Response:
             解析后的决策字典
         """
         try:
-            # 打印原始响应用于调试
-            print(f"🔍 [{self.model_name}] 原始响应:\n{response[:500]}")
+            # 不再打印原始响应，避免日志噪音
             
             # 清理响应文本
             response = response.strip()
@@ -229,12 +292,11 @@ Response:
                 print(f"⚠️ [{self.model_name}] 无效的confidence: {decision['confidence']}")
                 decision['confidence'] = 0.5
             
-            print(f"✅ [{self.model_name}] 决策解析成功: {decision['action']} {decision.get('symbol', 'N/A')}")
+            # 保留最小必要信息由上层汇总打印
             return decision
             
         except json.JSONDecodeError as e:
             print(f"❌ [{self.model_name}] JSON 解析失败: {e}")
-            print(f"清理后的响应: {response[:500]}")
             
             # 打印原始响应的前后50个字符
             full_response = response if response else "空响应"
@@ -243,7 +305,6 @@ Response:
             return self.get_default_decision()
         except Exception as e:
             print(f"❌ [{self.model_name}] 决策解析失败: {e}")
-            print(f"原始响应: {response[:500]}")
             return self.get_default_decision()
     
     def get_default_decision(self) -> Dict[str, Any]:

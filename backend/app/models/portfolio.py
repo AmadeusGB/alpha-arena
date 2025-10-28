@@ -37,6 +37,9 @@ class Position(Base):
     quantity = Column(Float, nullable=False)  # 持仓数量
     entry_price = Column(Float, nullable=False)  # 入场价格
     current_price = Column(Float)  # 当前价格
+    side = Column(String(10), default="long")  # long, short
+    leverage = Column(Float, default=1.0)  # 杠杆
+    margin = Column(Float, default=0.0)  # 冻结保证金（做空使用）
     pnl = Column(Float, default=0.0)  # 盈亏
     pnl_percent = Column(Float, default=0.0)  # 盈亏百分比
     status = Column(String(10), default="open")  # open, closed
@@ -57,11 +60,17 @@ class Trade(Base):
     model_name = Column(String(50), nullable=False, index=True)
     symbol = Column(String(20), nullable=False)
     side = Column(String(10), nullable=False)  # BUY, SELL
+    action_type = Column(String(20), nullable=True)  # OPEN_LONG, OPEN_SHORT, CLOSE
+    direction = Column(String(10), nullable=True)  # LONG, SHORT
+    leverage = Column(Float, nullable=True)  # 杠杆率
     quantity = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     fee = Column(Float, default=0.0)  # 手续费
     total_amount = Column(Float, nullable=False)  # 总金额
+    close_price_upper = Column(Float, nullable=True)  # 平仓上价格（止盈）
+    close_price_lower = Column(Float, nullable=True)  # 平仓下价格（止损）
     status = Column(String(20), default="completed")  # pending, completed, failed
+    feedback = Column(String(500), nullable=True)  # 失败或交易反馈信息
     executed_at = Column(DateTime(timezone=True), server_default=func.now())
     
     def __repr__(self):
@@ -109,6 +118,10 @@ class PortfolioHistory(Base):
     total_value = Column(Float, nullable=False)  # 总资产
     balance = Column(Float, nullable=False)  # 现金余额
     position_value = Column(Float, default=0.0)  # 持仓市值
+    long_exposure = Column(Float, default=0.0)  # 做多名义敞口
+    short_exposure = Column(Float, default=0.0)  # 做空名义敞口
+    total_quantity = Column(Float, default=0.0)  # 总数量
+    avg_leverage = Column(Float, default=1.0)  # 平均杠杆（名义加权）
     pnl = Column(Float, default=0.0)  # 盈亏
     pnl_percent = Column(Float, default=0.0)  # 盈亏百分比
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -13,7 +13,6 @@ async def _fetch_single_price(exchange_api: ExchangeAPI, symbol: str) -> tuple[s
     """并发获取单个代币价格"""
     try:
         price = await asyncio.to_thread(exchange_api.get_single_price, symbol)
-        print(f"✅ {symbol}: ${price:.4f}")
         return symbol, price
     except Exception as e:
         print(f"❌ 获取{symbol}价格失败: {e}")
@@ -38,7 +37,7 @@ class MarketService:
                 for symbol in symbols
             ]
             
-            print(f"🚀 开始并发获取 {len(symbols)} 个代币价格...")
+            # 汇总获取日志
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
             # 整理结果
@@ -50,7 +49,6 @@ class MarketService:
                     symbol, price = result
                     prices[symbol] = price
             
-            print(f"✅ 价格获取完成，成功: {len([p for p in prices.values() if p > 0])}/{len(prices)}")
             return prices
             
         except Exception as e:
@@ -71,7 +69,6 @@ class MarketService:
         
         try:
             self.db.commit()
-            print(f"成功保存 {len(prices)} 个价格数据")
         except Exception as e:
             self.db.rollback()
             print(f"保存价格失败: {e}")

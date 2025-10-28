@@ -2,12 +2,13 @@
 任务调度服务
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.services.market_service import MarketService
 from app.services.decision_service import DecisionService
 from app.services.portfolio_service import PortfolioService
 from app.models.portfolio import SystemLog
+from app.models.portfolio import Trade
 from app.models.market import MarketPrice
 from app.core.technical_indicators import calculate_basic_indicators
 
@@ -64,7 +65,6 @@ class SchedulerService:
                     price_list = [p.price for p in reversed(historical_prices)]
                     # 计算指标
                     indicators[symbol] = calculate_basic_indicators(price_list)
-                    print(f"✅ {symbol} 指标计算完成: RSI={indicators[symbol].get('rsi', 0):.2f}, MACD={indicators[symbol].get('macd', 0):.3f}")
             
             # 2. 获取交易设置
             from app.services.settings_service import SettingsService
@@ -81,10 +81,14 @@ class SchedulerService:
                 'max_drawdown': trading_settings.max_drawdown
             } if trading_settings else None
             
-            # 3. 获取所有模型的持仓信息
+            # 3. 使用最新价格刷新所有未平仓持仓的 current_price / pnl
             from app.models.portfolio import Position
             from app.models.model_config import ModelConfig
             portfolio_service = PortfolioService(self.db)
+            try:
+                portfolio_service.update_positions_prices(prices)
+            except Exception as e:
+                self.log_message("ERROR", f"更新持仓现价失败: {str(e)}")
             
             # 从数据库获取所有启用的模型
             enabled_models = self.db.query(ModelConfig).filter(
@@ -122,24 +126,76 @@ class SchedulerService:
                 if decision_data and decision_data.get('action') != 'HOLD':
                     symbol = decision_data.get('symbol')
                     action = decision_data.get('action')
+                    trade = decision_data.get('trade') if isinstance(decision_data.get('trade'), dict) else None
+                    decision_id = decision_data.get('decision_id')
                     
                     if symbol and symbol in prices:
                         try:
-                            # 简化：每次交易固定数量
-                            quantity = 0.1  # 固定交易 0.1 个单位
-                            price = prices[symbol]
+                            price = trade.get('entry_price') if trade and isinstance(trade.get('entry_price'), (int, float)) else prices[symbol]
+                            quantity = trade.get('quantity') if trade and isinstance(trade.get('quantity'), (int, float)) else 0.1
+                            direction = trade.get('direction') if trade else None
+                            leverage = trade.get('leverage') if trade else None
                             
                             portfolio_service.simulate_trade(
                                 model_name=model_name,
                                 symbol=symbol,
                                 action=action,
                                 price=price,
-                                quantity=quantity
+                                quantity=quantity,
+                                direction=direction,
+                                leverage=leverage,
+                                decision_id=decision_id
                             )
+                            # 成功：将关联决策标记为 completed
+                            try:
+                                from app.models.decision import Decision
+                                if decision_id:
+                                    d = self.db.query(Decision).filter(Decision.id==decision_id).first()
+                                else:
+                                    d = self.db.query(Decision).filter(Decision.model_name==model_name).order_by(Decision.timestamp.desc()).first()
+                                if d:
+                                    d.status = 'completed'
+                                    d.feedback = None
+                                    self.db.commit()
+                            except Exception:
+                                self.db.rollback()
                         except Exception as e:
                             self.log_message("ERROR", f"模型 {model_name} 交易失败: {str(e)}")
+                            # 将失败写入 Trade，供前端展示
+                            try:
+                                failed_trade = Trade(
+                                    model_name=model_name,
+                                    symbol=symbol,
+                                    side=action,
+                                    direction=direction,
+                                    leverage=leverage,
+                                    quantity=quantity if isinstance(quantity, (int, float)) else 0.0,
+                                    price=price if isinstance(price, (int, float)) else 0.0,
+                                    fee=0.0,
+                                    total_amount=((price or 0.0) * (quantity or 0.0)) if isinstance(price, (int, float)) and isinstance(quantity, (int, float)) else 0.0,
+                                    decision_id=decision_id,
+                                    status='failed',
+                                    feedback=str(e)
+                                )
+                                self.db.add(failed_trade)
+                                self.db.commit()
+                                # 同时将最新决策标记为 failed
+                                try:
+                                    from app.models.decision import Decision
+                                    if decision_id:
+                                        d = self.db.query(Decision).filter(Decision.id==decision_id).first()
+                                    else:
+                                        d = self.db.query(Decision).filter(Decision.model_name==model_name).order_by(Decision.timestamp.desc()).first()
+                                    if d:
+                                        d.status = 'failed'
+                                        d.feedback = str(e)
+                                        self.db.commit()
+                                except Exception:
+                                    self.db.rollback()
+                            except Exception:
+                                self.db.rollback()
             
-            self.last_run_time = datetime.now()
+            self.last_run_time = datetime.now(timezone.utc)
             self.error_count = 0
             self.log_message("INFO", "定时任务执行成功")
             
@@ -162,12 +218,11 @@ class SchedulerService:
             
             # 获取所有模型
             from app.models.portfolio import ModelPortfolio
-            models = self.db.query(ModelPortfolio).all()
+            models = self.db.query(ModelPortfolio).filter(ModelPortfolio.is_active == 'active').all()
             
             for model in models:
                 try:
                     portfolio_service.save_portfolio_history(model.model_name)
-                    print(f"✅ {model.model_name} 净值历史已保存")
                 except Exception as e:
                     self.log_message("ERROR", f"模型 {model.model_name} 保存历史失败: {str(e)}")
             

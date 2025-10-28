@@ -8,8 +8,7 @@ export default function Navigation() {
 
   const navItems = [
     { href: '/', label: '📊 仪表盘' },
-    { href: '/models', label: '🎯 模型对比' },
-    { href: '/system', label: '⚙️ 系统管理' },
+    { href: '/insights', label: '📈 资金与风险洞察' },
     { href: '/settings', label: '🎛️ 系统设置' },
   ];
 

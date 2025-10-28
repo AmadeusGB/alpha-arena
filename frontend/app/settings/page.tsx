@@ -1,7 +1,7 @@
-'use client';
-
+"use client";
 import { useEffect, useState } from 'react';
 import { settingsApi, modelsApi } from '../../lib/api';
+import SystemPage from '../system/page';
 
 interface TradingSettings {
   id: number;
@@ -232,6 +232,17 @@ export default function SettingsPage() {
             >
               🤖 模型管理
             </button>
+            {/* 新增：调度器 Tab */}
+            <button
+              onClick={() => setActiveTab('scheduler' as any)}
+              className={`px-4 py-2 font-medium transition-colors ${
+                (activeTab as any) === 'scheduler'
+                  ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-300'
+              }`}
+            >
+              🕒 调度器
+            </button>
           </div>
         </div>
 
@@ -456,6 +467,13 @@ export default function SettingsPage() {
           </button>
         </div>
       </>
+    )}
+
+    {/* 调度器 Tab */}
+    {(activeTab as any) === 'scheduler' && (
+      <div className="bg-white dark:bg-zinc-800 rounded-lg p-2 shadow-sm border border-zinc-200 dark:border-zinc-700">
+        <SystemPage />
+      </div>
     )}
 
     {/* 模型管理 Tab */}

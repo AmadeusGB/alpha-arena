@@ -29,6 +29,13 @@ def init_default_models():
                 'api_key': settings.SILICONFLOW_API_KEY,
                 'base_url': settings.SILICONFLOW_BASE_URL,
                 'is_enabled': True,
+                # 默认交易参数（可按需调整）
+                'trade_symbol': 'BTCUSDT',
+                'trade_quantity': 0.01,
+                'leverage': 1,
+                'trade_side': 'LONG',
+                'close_price_upper': None,
+                'close_price_lower': None,
             },
             {
                 'name': 'deepseek',
@@ -37,6 +44,12 @@ def init_default_models():
                 'api_key': settings.SILICONFLOW_API_KEY,
                 'base_url': settings.SILICONFLOW_BASE_URL,
                 'is_enabled': True,
+                'trade_symbol': 'ETHUSDT',
+                'trade_quantity': 0.1,
+                'leverage': 2,
+                'trade_side': 'LONG',
+                'close_price_upper': None,
+                'close_price_lower': None,
             },
             {
                 'name': 'kimi',
@@ -45,6 +58,12 @@ def init_default_models():
                 'api_key': settings.SILICONFLOW_API_KEY,
                 'base_url': settings.SILICONFLOW_BASE_URL,
                 'is_enabled': True,
+                'trade_symbol': 'SOLUSDT',
+                'trade_quantity': 1.0,
+                'leverage': 2,
+                'trade_side': 'LONG',
+                'close_price_upper': None,
+                'close_price_lower': None,
             }
         ]
         

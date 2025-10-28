@@ -33,6 +33,8 @@ class PositionResponse(BaseModel):
     quantity: float
     entry_price: float
     current_price: Optional[float]
+    side: Optional[str] = None
+    leverage: Optional[float] = None
     pnl: float
     pnl_percent: float
     status: str

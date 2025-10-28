@@ -45,7 +45,14 @@ class ModelConfigService:
             temperature=model_data.temperature,
             timeout=model_data.timeout,
             is_enabled=model_data.is_enabled,
-            params=model_data.params or {}
+            params=model_data.params or {},
+            # 交易参数
+            trade_symbol=model_data.trade_symbol,
+            trade_quantity=model_data.trade_quantity,
+            leverage=model_data.leverage,
+            trade_side=model_data.trade_side,
+            close_price_upper=model_data.close_price_upper,
+            close_price_lower=model_data.close_price_lower
         )
         
         self.db.add(model)

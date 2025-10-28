@@ -26,6 +26,18 @@ class Settings(BaseSettings):
     BITGET_SECRET_KEY: str = os.getenv("BITGET_SECRET_KEY", "")
     BITGET_PASSPHRASE: str = os.getenv("BITGET_PASSPHRASE", "")
     
+    # OKX API
+    OKX_API_KEY: str = os.getenv("OKX_API_KEY", "")
+    OKX_SECRET_KEY: str = os.getenv("OKX_SECRET_KEY", "")
+    OKX_PASSPHRASE: str = os.getenv("OKX_PASSPHRASE", "")
+    
+    # Binance API
+    BINANCE_API_KEY: str = os.getenv("BINANCE_API_KEY", "")
+    BINANCE_SECRET_KEY: str = os.getenv("BINANCE_SECRET_KEY", "")
+    
+    # 默认交易所
+    DEFAULT_EXCHANGE: str = os.getenv("DEFAULT_EXCHANGE", "BITGET")
+    
     # 任务调度配置
     SCHEDULER_ENABLED: bool = True
     SCHEDULER_INTERVAL_MINUTES: int = 1

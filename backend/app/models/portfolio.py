@@ -66,7 +66,13 @@ class Trade(Base):
     quantity = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
     fee = Column(Float, default=0.0)  # 手续费
+    slippage = Column(Float, default=0.0)  # 滑点费用（以USDT计，基于名义金额 * slippage_rate）
     total_amount = Column(Float, nullable=False)  # 总金额
+    notional = Column(Float, nullable=True)  # 名义金额（price*quantity）
+    margin_required = Column(Float, nullable=True)  # 本次开仓占用保证金
+    commission_rate = Column(Float, nullable=True)  # 手续费率
+    slippage_rate = Column(Float, nullable=True)  # 滑点率
+    realized_pnl = Column(Float, nullable=True)  # 已实现盈亏（平仓时：pnl-fee-slippage；开仓为0）
     close_price_upper = Column(Float, nullable=True)  # 平仓上价格（止盈）
     close_price_lower = Column(Float, nullable=True)  # 平仓下价格（止损）
     status = Column(String(20), default="completed")  # pending, completed, failed

@@ -190,7 +190,10 @@ async def get_dashboard_all_data(
     # 3. 获取所有模型的持仓
     positions_data = []
     model_names = [p.model_name for p in portfolios]
-    all_positions = db.query(Position).filter(Position.model_name.in_(model_names)).all()
+    all_positions = db.query(Position).filter(
+        Position.model_name.in_(model_names),
+        Position.status == 'open'
+    ).all()
     
     from app.schemas.portfolio import PositionResponse
     for pos in all_positions:

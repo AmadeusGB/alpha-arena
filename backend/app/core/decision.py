@@ -179,6 +179,20 @@ Return your response in this exact format:
         "close_price_lower": <number|null>
     }},
     "action_label": "开仓|开多仓|开空仓|平仓|观望"
+    ,
+    "trades": [
+        {{
+            "symbol": "{'|'.join(symbols)}",
+            "action": "BUY|SELL",
+            "quantity": <number>,
+            "leverage": <integer>,
+            "direction": "LONG|SHORT",
+            "entry_price": <number>,
+            "close_price_upper": <number|null>,
+            "close_price_lower": <number|null>
+        }}
+        // multiple items allowed; for HOLD return an empty array
+    ]
 }}
 
 **STRICT RULES:**
@@ -190,6 +204,7 @@ Return your response in this exact format:
    - 平仓: Closing an existing position (either side)
    - 开仓: Non-leveraged opening
    - 观望: HOLD
+3. For multi-instrument or simultaneous operations, fill the "trades" array with one object per operation. You MAY both close and open in the same response (e.g., close LONG then open SHORT), they will be executed sequentially.
 3. confidence: Your confidence in this decision (0.0 to 1.0)
 4. rationale: Brief reasoning for your decision
 5. analysis: Provide a concise paragraph including (positions analysis, market analysis, next action plan, risk management strategy)

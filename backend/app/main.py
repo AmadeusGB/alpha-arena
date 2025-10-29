@@ -94,7 +94,7 @@ def run_save_history_task():
 # 启动调度器（如果启用）
 if app_settings.SCHEDULER_ENABLED:
     # 任务1: 交易决策任务 - 每300秒执行一次
-    trading_interval = 300
+    trading_interval = 600
     fetch_prices_interval = 10
     save_history_interval = 10
     scheduler.add_job(

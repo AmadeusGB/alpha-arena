@@ -191,6 +191,16 @@ class PortfolioService:
     ) -> Trade:
         """模拟交易"""
         portfolio = self.get_portfolio(model_name)
+        # 统一读取交易费率/滑点率（来自 TradingSettings）
+        try:
+            from app.services.settings_service import SettingsService
+            settings_service = SettingsService(self.db)
+            ts_global = settings_service.get_settings()
+        except Exception:
+            ts_global = None
+        maker_fee_rate_global = (getattr(ts_global, 'maker_fee', None) or 0.0002)
+        taker_fee_rate_global = (getattr(ts_global, 'taker_fee', None) or 0.0005)
+        slippage_rate_global = (getattr(ts_global, 'slippage', None) or 0.0001)
         
         if action == "BUY":
             existing = self.db.query(Position).filter(
@@ -203,12 +213,18 @@ class PortfolioService:
                 # 平空（支持部分平仓）
                 close_qty = min(quantity, existing.quantity)
                 notional = price * close_qty
-                fee = notional * 0.0005
+                # 费率与滑点（使用全局设置）
+                maker_fee = maker_fee_rate_global
+                taker_fee = taker_fee_rate_global
+                slippage_rate = slippage_rate_global
+                fee = notional * taker_fee
+                slippage_val = notional * slippage_rate
                 # 盈亏基于平仓数量
                 pnl = (existing.entry_price - price) * close_qty
                 # 按比例释放保证金
                 release_margin = (existing.margin or 0.0) * (close_qty / existing.quantity)
-                refund = release_margin + pnl - fee
+                realized_pnl = pnl - fee - slippage_val
+                refund = release_margin + realized_pnl
                 portfolio.balance += refund
 
                 # 更新持仓
@@ -220,6 +236,8 @@ class PortfolioService:
                     existing.pnl = (existing.pnl or 0.0) + pnl
                     base = existing.entry_price if existing.entry_price else 0.0
                     existing.pnl_percent = (existing.pnl / (base * (existing.quantity or 1)) * 100) if (base and existing.quantity) else 0.0
+                    existing.quantity = 0.0
+                    existing.margin = 0.0
                 else:
                     existing.quantity = remaining_qty
                     existing.margin = remaining_margin
@@ -228,7 +246,11 @@ class PortfolioService:
             else:
                 # 开多（保证金模式）- 现金校验与仓位比例控制
                 notional = price * quantity
-                fee = notional * 0.0005
+                maker_fee = maker_fee_rate_global
+                taker_fee = taker_fee_rate_global
+                slippage_rate = slippage_rate_global
+                fee = notional * taker_fee
+                slippage_val = notional * slippage_rate
                 # 读取风控设置
                 from app.services.settings_service import SettingsService
                 settings_service = SettingsService(self.db)
@@ -245,7 +267,7 @@ class PortfolioService:
                     fee=fee,
                     leverage_eff=leverage_eff,
                 )
-                portfolio.balance -= (margin_required + fee)
+                portfolio.balance -= (margin_required + fee + slippage_val)
 
                 position = Position(
                     model_name=model_name,
@@ -272,7 +294,11 @@ class PortfolioService:
             if position is None and (isinstance(direction, str) and direction.lower() == 'short'):
                 # 开空（保证金模式）：冻结保证金
                 notional = price * quantity
-                fee = notional * 0.0005
+                maker_fee = maker_fee_rate_global
+                taker_fee = taker_fee_rate_global
+                slippage_rate = slippage_rate_global
+                fee = notional * taker_fee
+                slippage_val = notional * slippage_rate
                 from app.services.settings_service import SettingsService
                 settings_service = SettingsService(self.db)
                 ts = settings_service.get_settings()
@@ -288,7 +314,7 @@ class PortfolioService:
                     fee=fee,
                     leverage_eff=leverage_eff,
                 )
-                portfolio.balance -= (margin_required + fee)
+                portfolio.balance -= (margin_required + fee + slippage_val)
 
                 new_pos = Position(
                     model_name=model_name,
@@ -309,13 +335,18 @@ class PortfolioService:
                     raise ValueError("没有持仓")
                 close_qty = min(quantity, position.quantity)
                 notional = price * close_qty
-                fee = notional * 0.0005
+                maker_fee = maker_fee_rate_global
+                taker_fee = taker_fee_rate_global
+                slippage_rate = slippage_rate_global
+                fee = notional * taker_fee
+                slippage_val = notional * slippage_rate
                 if (position.side or 'long') == 'short':
                     pnl = (position.entry_price - price) * close_qty
                 else:
                     pnl = (price - position.entry_price) * close_qty
                 release_margin = (position.margin or 0.0) * (close_qty / position.quantity)
-                refund = release_margin + pnl - fee
+                realized_pnl = pnl - fee - slippage_val
+                refund = release_margin + realized_pnl
                 portfolio.balance += refund
 
                 remaining_qty = position.quantity - close_qty
@@ -327,6 +358,8 @@ class PortfolioService:
                     position.pnl = (position.pnl or 0.0) + pnl
                     base = position.entry_price if position.entry_price else 0.0
                     position.pnl_percent = (position.pnl / (base * (position.quantity or 1)) * 100) if (base and position.quantity) else 0.0
+                    position.quantity = 0.0
+                    position.margin = 0.0
                 else:
                     position.quantity = remaining_qty
                     position.margin = remaining_margin
@@ -343,10 +376,16 @@ class PortfolioService:
             quantity=quantity,
             price=price,
             fee=fee,
+            slippage=slippage_val if 'slippage_val' in locals() else 0.0,
             total_amount=price * quantity,
+            notional=notional if 'notional' in locals() else None,
+            margin_required=margin_required if 'margin_required' in locals() else None,
+            commission_rate=taker_fee if 'taker_fee' in locals() else None,
+            slippage_rate=slippage_rate if 'slippage_rate' in locals() else None,
             action_type=action_type,
             status='completed',
             feedback=None,
+            realized_pnl=realized_pnl if 'realized_pnl' in locals() else None,
             decision_id=decision_id
         )
         self.db.add(trade)

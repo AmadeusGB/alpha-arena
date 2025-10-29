@@ -123,19 +123,42 @@ class SchedulerService:
             
             # 5. 根据决策更新持仓（简化版本，实际需要更复杂的逻辑）
             for model_name, decision_data in decisions.items():
-                if decision_data and decision_data.get('action') != 'HOLD':
-                    symbol = decision_data.get('symbol')
-                    action = decision_data.get('action')
-                    trade = decision_data.get('trade') if isinstance(decision_data.get('trade'), dict) else None
+                if decision_data and decision_data.get('action') != 'HOLD' or (isinstance(decision_data.get('trades'), list) and len(decision_data.get('trades'))>0):
                     decision_id = decision_data.get('decision_id')
+                    # 组装要执行的操作列表（兼容单笔trade与多笔trades）
+                    ops = []
+                    if isinstance(decision_data.get('trades'), list) and len(decision_data.get('trades'))>0:
+                        for it in decision_data['trades']:
+                            if not isinstance(it, dict):
+                                continue
+                            if not it.get('symbol') or not it.get('action'):
+                                continue
+                            ops.append(it)
+                    else:
+                        symbol = decision_data.get('symbol')
+                        action = decision_data.get('action')
+                        trade = decision_data.get('trade') if isinstance(decision_data.get('trade'), dict) else None
+                        if symbol and action and trade:
+                            ops.append({
+                                'symbol': symbol,
+                                'action': action,
+                                'quantity': trade.get('quantity'),
+                                'leverage': trade.get('leverage'),
+                                'direction': trade.get('direction'),
+                                'entry_price': trade.get('entry_price')
+                            })
                     
-                    if symbol and symbol in prices:
+                    for op in ops:
+                        symbol = op.get('symbol')
+                        action = op.get('action')
+                        if not symbol or symbol not in prices:
+                            continue
                         try:
-                            price = trade.get('entry_price') if trade and isinstance(trade.get('entry_price'), (int, float)) else prices[symbol]
-                            quantity = trade.get('quantity') if trade and isinstance(trade.get('quantity'), (int, float)) else 0.1
-                            direction = trade.get('direction') if trade else None
-                            leverage = trade.get('leverage') if trade else None
-                            
+                            price = op.get('entry_price') if isinstance(op.get('entry_price'), (int, float)) else prices[symbol]
+                            quantity = op.get('quantity') if isinstance(op.get('quantity'), (int, float)) else 0.1
+                            direction = op.get('direction')
+                            leverage = op.get('leverage')
+
                             portfolio_service.simulate_trade(
                                 model_name=model_name,
                                 symbol=symbol,
@@ -167,10 +190,10 @@ class SchedulerService:
                                     model_name=model_name,
                                     symbol=symbol,
                                     side=action,
-                                    direction=direction,
-                                    leverage=leverage,
-                                    quantity=quantity if isinstance(quantity, (int, float)) else 0.0,
-                                    price=price if isinstance(price, (int, float)) else 0.0,
+                                    direction=op.get('direction'),
+                                    leverage=op.get('leverage'),
+                                    quantity=op.get('quantity') if isinstance(op.get('quantity'), (int, float)) else 0.0,
+                                    price=op.get('entry_price') if isinstance(op.get('entry_price'), (int, float)) else 0.0,
                                     fee=0.0,
                                     total_amount=((price or 0.0) * (quantity or 0.0)) if isinstance(price, (int, float)) and isinstance(quantity, (int, float)) else 0.0,
                                     decision_id=decision_id,

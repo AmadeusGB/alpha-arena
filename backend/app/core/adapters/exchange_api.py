@@ -7,9 +7,9 @@
 
 import os
 from typing import Dict, List, Optional
-from adapters.bitget_api_client import BitgetAPIClient
-from adapters.okx_api_client import OKXAPIClient
-from adapters.binance_api_client import BinanceAPIClient
+from app.core.adapters.bitget_api_client import BitgetAPIClient
+from app.core.adapters.okx_api_client import OKXAPIClient
+from app.core.adapters.binance_api_client import BinanceAPIClient
 
 
 class ExchangeAPI:
